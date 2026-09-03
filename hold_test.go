@@ -13,7 +13,7 @@ func setupStockedAsset(t *testing.T, m mwanachamaassetmanager.AssetManager, ctx 
 	t.Helper()
 	a, loc := setupFungibleAsset(t, m, ctx)
 	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: qty, ToLocationID: loc.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: qty, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestCreateHold_ReservesAgainstBalance(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
-	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t)})
+	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t), PlacedBy: testActor})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}
@@ -35,11 +35,11 @@ func TestCreateHold_ReservesAgainstBalance(t *testing.T) {
 
 	// A second hold for more than what's left (10 available of 20) is
 	// rejected.
-	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 11, ExpiresAt: futureRFC3339(t)}); !errors.Is(err, mwanachamaassetmanager.ErrInsufficientAvailable) {
+	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 11, ExpiresAt: futureRFC3339(t), PlacedBy: testActor}); !errors.Is(err, mwanachamaassetmanager.ErrInsufficientAvailable) {
 		t.Fatalf("expected ErrInsufficientAvailable, got %v", err)
 	}
 	// Exactly what's left succeeds.
-	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t)}); err != nil {
+	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t), PlacedBy: testActor}); err != nil {
 		t.Fatalf("expected exact remaining quantity to succeed, got %v", err)
 	}
 }
@@ -50,7 +50,7 @@ func TestCreateHold_ExpiresAtMustBeFuture(t *testing.T) {
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
 	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
-	_, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 1, ExpiresAt: past})
+	_, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 1, ExpiresAt: past, PlacedBy: testActor})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidHold) {
 		t.Fatalf("expected ErrInvalidHold for a past ExpiresAt, got %v", err)
 	}
@@ -61,9 +61,20 @@ func TestCreateHold_MissingLocation(t *testing.T) {
 	m := newTestManager(t)
 	a, _ := setupStockedAsset(t, m, ctx, 20)
 
-	_, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, Quantity: 1, ExpiresAt: futureRFC3339(t)})
+	_, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, Quantity: 1, ExpiresAt: futureRFC3339(t), PlacedBy: testActor})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidHold) {
 		t.Fatalf("expected ErrInvalidHold for missing LocationID, got %v", err)
+	}
+}
+
+func TestCreateHold_MissingPlacedBy(t *testing.T) {
+	ctx := context.Background()
+	m := newTestManager(t)
+	a, loc := setupStockedAsset(t, m, ctx, 20)
+
+	_, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 1, ExpiresAt: futureRFC3339(t)})
+	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidHold) {
+		t.Fatalf("expected ErrInvalidHold for missing PlacedBy, got %v", err)
 	}
 }
 
@@ -72,12 +83,12 @@ func TestCommitHold_Full(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
-	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t)})
+	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t), PlacedBy: testActor})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}
 
-	committed, mv, err := m.CommitHold(ctx, testAgency, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "checkout-actor")
+	committed, mv, err := m.CommitHold(ctx, testAgency, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", testActor)
 	if err != nil {
 		t.Fatalf("CommitHold: %v", err)
 	}
@@ -102,7 +113,7 @@ func TestCommitHold_PartialReleasesRemainderAndFreesAvailability(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
-	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t)})
+	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t), PlacedBy: testActor})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}
@@ -121,7 +132,7 @@ func TestCommitHold_PartialReleasesRemainderAndFreesAvailability(t *testing.T) {
 	// Balance: 20 arrived - 12 departed = 8. The hold is now terminal
 	// (partially_committed), so it no longer reserves anything — the full
 	// remaining 8 must be available to a fresh hold.
-	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 8, ExpiresAt: futureRFC3339(t)}); err != nil {
+	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 8, ExpiresAt: futureRFC3339(t), PlacedBy: testActor}); err != nil {
 		t.Fatalf("expected the released remainder to be available, got %v", err)
 	}
 }
@@ -131,11 +142,11 @@ func TestCommitHold_WrongStatusRejected(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
-	h, _ := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t)})
-	if _, _, err := m.CommitHold(ctx, testAgency, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "actor"); err != nil {
+	h, _ := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t), PlacedBy: testActor})
+	if _, _, err := m.CommitHold(ctx, testAgency, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", testActor); err != nil {
 		t.Fatalf("first CommitHold: %v", err)
 	}
-	if _, _, err := m.CommitHold(ctx, testAgency, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "actor"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidHoldStatusTransition) {
+	if _, _, err := m.CommitHold(ctx, testAgency, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", testActor); !errors.Is(err, mwanachamaassetmanager.ErrInvalidHoldStatusTransition) {
 		t.Fatalf("expected ErrInvalidHoldStatusTransition on a second commit, got %v", err)
 	}
 }
@@ -145,7 +156,7 @@ func TestReleaseHold(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
-	h, _ := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t)})
+	h, _ := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t), PlacedBy: testActor})
 	released, err := m.ReleaseHold(ctx, testAgency, h.ID)
 	if err != nil {
 		t.Fatalf("ReleaseHold: %v", err)
@@ -155,7 +166,7 @@ func TestReleaseHold(t *testing.T) {
 	}
 
 	// Full quantity available again.
-	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t)}); err != nil {
+	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t), PlacedBy: testActor}); err != nil {
 		t.Fatalf("expected released quantity to be available, got %v", err)
 	}
 }
@@ -166,7 +177,7 @@ func TestListHoldsExpiredAsOf(t *testing.T) {
 	a, loc := setupStockedAsset(t, m, ctx, 20)
 
 	nearFuture := time.Now().UTC().Add(time.Minute).Format(time.RFC3339)
-	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: nearFuture})
+	h, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: nearFuture, PlacedBy: testActor})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}

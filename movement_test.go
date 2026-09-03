@@ -8,6 +8,8 @@ import (
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
 
+const testActor = "actor-1"
+
 func setupFungibleAsset(t *testing.T, m mwanachamaassetmanager.AssetManager, ctx context.Context) (mwanachamaassetmanager.Asset, mwanachamaassetmanager.Location) {
 	t.Helper()
 	loc, err := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Warehouse"})
@@ -27,7 +29,7 @@ func TestPostMovement_ArrivedThenBalance(t *testing.T) {
 	a, loc := setupFungibleAsset(t, m, ctx)
 
 	mv, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: loc.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: loc.ID, PerformedBy: testActor,
 	})
 	if err != nil {
 		t.Fatalf("PostMovement: %v", err)
@@ -60,12 +62,12 @@ func TestPostMovement_TransferredMovesBalance(t *testing.T) {
 	shop, _ := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Shop"})
 
 	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 50, ToLocationID: warehouse.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 50, ToLocationID: warehouse.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
 	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 20, FromLocationID: warehouse.ID, ToLocationID: shop.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 20, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement transferred: %v", err)
 	}
@@ -85,8 +87,8 @@ func TestPostMovement_DepartedReducesBalance(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	_, _ = m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID})
-	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindDeparted, Quantity: 10, FromLocationID: loc.ID})
+	_, _ = m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID, PerformedBy: testActor})
+	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindDeparted, Quantity: 10, FromLocationID: loc.ID, PerformedBy: testActor})
 	if err != nil {
 		t.Fatalf("PostMovement departed: %v", err)
 	}
@@ -101,8 +103,8 @@ func TestPostMovement_AdjustedCanBeNegative(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	_, _ = m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID})
-	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindAdjusted, Quantity: -3, ToLocationID: loc.ID, Note: "stock count variance"})
+	_, _ = m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID, PerformedBy: testActor})
+	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindAdjusted, Quantity: -3, ToLocationID: loc.ID, Note: "stock count variance", PerformedBy: testActor})
 	if err != nil {
 		t.Fatalf("PostMovement adjusted: %v", err)
 	}
@@ -121,14 +123,15 @@ func TestPostMovement_InvalidShapes(t *testing.T) {
 		name string
 		mv   mwanachamaassetmanager.Movement
 	}{
-		{"arrived with FromLocationID", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID, FromLocationID: loc.ID}},
-		{"arrived non-positive quantity", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 0, ToLocationID: loc.ID}},
-		{"transferred same location", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 1, FromLocationID: loc.ID, ToLocationID: loc.ID}},
-		{"departed with ToLocationID", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindDeparted, Quantity: 1, FromLocationID: loc.ID, ToLocationID: loc.ID}},
-		{"adjusted zero quantity", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindAdjusted, Quantity: 0, ToLocationID: loc.ID}},
-		{"reversed posted directly", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindReversed, Quantity: 1, ToLocationID: loc.ID}},
-		{"unrecognized kind", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: "bogus", Quantity: 1, ToLocationID: loc.ID}},
-		{"missing asset id", mwanachamaassetmanager.Movement{Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID}},
+		{"arrived with FromLocationID", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID, FromLocationID: loc.ID, PerformedBy: testActor}},
+		{"arrived non-positive quantity", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 0, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"transferred same location", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 1, FromLocationID: loc.ID, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"departed with ToLocationID", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindDeparted, Quantity: 1, FromLocationID: loc.ID, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"adjusted zero quantity", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindAdjusted, Quantity: 0, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"reversed posted directly", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindReversed, Quantity: 1, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"unrecognized kind", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: "bogus", Quantity: 1, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"missing asset id", mwanachamaassetmanager.Movement{Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID, PerformedBy: testActor}},
+		{"missing performed by", mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -146,12 +149,12 @@ func TestPostMovement_SerializedQuantityMustBeOne(t *testing.T) {
 	loc, _ := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Pasture"})
 	a, _ := m.CreateAsset(ctx, testAgency, mwanachamaassetmanager.Asset{Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-1"})
 
-	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 2, ToLocationID: loc.ID})
+	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 2, ToLocationID: loc.ID, PerformedBy: testActor})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
 		t.Fatalf("expected ErrInvalidMovement for quantity != 1 on a serialized asset, got %v", err)
 	}
 
-	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID}); err != nil {
+	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID, PerformedBy: testActor}); err != nil {
 		t.Fatalf("expected quantity 1 to succeed, got %v", err)
 	}
 }
@@ -161,12 +164,12 @@ func TestReverseMovement_CancelsBalance(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 40, ToLocationID: loc.ID})
+	mv, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 40, ToLocationID: loc.ID, PerformedBy: testActor})
 	if err != nil {
 		t.Fatalf("PostMovement: %v", err)
 	}
 
-	reversal, err := m.ReverseMovement(ctx, testAgency, mv.ID, "actor-1", "counted wrong")
+	reversal, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "counted wrong")
 	if err != nil {
 		t.Fatalf("ReverseMovement: %v", err)
 	}
@@ -195,16 +198,27 @@ func TestReverseMovement_CancelsBalance(t *testing.T) {
 	}
 }
 
+func TestReverseMovement_RequiresPerformedBy(t *testing.T) {
+	ctx := context.Background()
+	m := newTestManager(t)
+	a, loc := setupFungibleAsset(t, m, ctx)
+
+	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
+	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, "", "no actor"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
+		t.Fatalf("expected ErrInvalidMovement for empty performedBy, got %v", err)
+	}
+}
+
 func TestReverseMovement_DoubleReverseRejected(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID})
-	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, "actor-1", "first"); err != nil {
+	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
+	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "first"); err != nil {
 		t.Fatalf("first ReverseMovement: %v", err)
 	}
-	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, "actor-1", "second"); !errors.Is(err, mwanachamaassetmanager.ErrMovementAlreadyReversed) {
+	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "second"); !errors.Is(err, mwanachamaassetmanager.ErrMovementAlreadyReversed) {
 		t.Fatalf("expected ErrMovementAlreadyReversed, got %v", err)
 	}
 }
@@ -214,12 +228,12 @@ func TestReverseMovement_CannotReverseAReversal(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID})
-	reversal, err := m.ReverseMovement(ctx, testAgency, mv.ID, "actor-1", "first")
+	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
+	reversal, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "first")
 	if err != nil {
 		t.Fatalf("ReverseMovement: %v", err)
 	}
-	if _, err := m.ReverseMovement(ctx, testAgency, reversal.ID, "actor-1", "again"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
+	if _, err := m.ReverseMovement(ctx, testAgency, reversal.ID, testActor, "again"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
 		t.Fatalf("expected ErrInvalidMovement reversing a reversal, got %v", err)
 	}
 }

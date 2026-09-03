@@ -169,9 +169,15 @@ type Movement struct {
 	ToLocationID string `json:"to_location_id,omitempty"`
 
 	// PerformedBy is a denormalized external actor id — who recorded this
-	// movement. Not yet a typed edge; see the actor/auth open question in
-	// requirements.md.
-	PerformedBy string `json:"performed_by,omitempty"`
+	// movement. Required (validateMovementShape rejects an empty value):
+	// every ledger entry needs an accountable actor, matching
+	// merchandise-entry's issued_by not-null invariant. A plain caller-
+	// supplied string, not a typed edge to a modelled Actor vertex — this
+	// package owns no auth model of its own (decision #10: it's imported
+	// as a package, with no HTTP boundary where auth would live; whatever
+	// authenticates the caller is expected to hand this package an actor
+	// id it already trusts).
+	PerformedBy string `json:"performed_by"`
 
 	// ReversesMovementID points at the Movement this entry mirrors, for
 	// Kind = [MovementKindReversed]. Empty otherwise.
@@ -263,9 +269,10 @@ type Hold struct {
 	ExpiresAt string `json:"expires_at"`
 
 	// PlacedBy is a denormalized external actor id — who placed this hold.
-	// Not yet a typed edge; see the actor/auth open question in
-	// requirements.md.
-	PlacedBy string `json:"placed_by,omitempty"`
+	// Required (CreateHold rejects an empty value), same reasoning as
+	// Movement.PerformedBy: a plain caller-supplied string, not a typed
+	// edge — this package owns no auth model of its own.
+	PlacedBy string `json:"placed_by"`
 
 	// CreatedAt is the RFC 3339 timestamp when this hold was created.
 	CreatedAt string `json:"created_at"`

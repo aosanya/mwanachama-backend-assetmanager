@@ -32,6 +32,9 @@ func (m *assetManager) CreateHold(ctx context.Context, agencyID string, h Hold) 
 	if h.Quantity <= 0 {
 		return Hold{}, fmt.Errorf("%w: Quantity must be positive", ErrInvalidHold)
 	}
+	if h.PlacedBy == "" {
+		return Hold{}, fmt.Errorf("%w: PlacedBy is required — every hold needs an accountable actor", ErrInvalidHold)
+	}
 	expiresAt, err := time.Parse(time.RFC3339, h.ExpiresAt)
 	if err != nil {
 		return Hold{}, fmt.Errorf("%w: ExpiresAt must be RFC 3339: %v", ErrInvalidHold, err)

@@ -20,5 +20,7 @@ and real Postgres (40 tests, `go test -race ./...` clean). See
 and [documentation/3. implementation/todo_done.md](documentation/3.%20implementation/todo_done.md)
 for what shipped. No HTTP/gRPC layer of its own by design — imported
 directly as a Go package, same as `mwanachama-backend-taskmanager` — and
-not yet imported by any specific caller. The actor/auth model is still an
-open question — see requirements.md.
+not yet imported by any specific caller. Every actor on a Movement or Hold
+is required and caller-supplied, with no auth model of its own (this
+package has no HTTP boundary for auth to live at). See requirements.md's
+decision table for the full record.

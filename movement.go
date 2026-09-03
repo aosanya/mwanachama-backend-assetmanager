@@ -84,6 +84,9 @@ func validateMovementShape(mv Movement) (movementShape, error) {
 	if mv.AssetID == "" {
 		return movementShape{}, fmt.Errorf("%w: AssetID is required", ErrInvalidMovement)
 	}
+	if mv.PerformedBy == "" {
+		return movementShape{}, fmt.Errorf("%w: PerformedBy is required — every ledger entry needs an accountable actor, matching merchandise-entry's issued_by not-null invariant", ErrInvalidMovement)
+	}
 	switch mv.Kind {
 	case MovementKindArrived:
 		if mv.Quantity <= 0 {
@@ -164,6 +167,9 @@ func (m *assetManager) syncAssetLocation(ctx context.Context, agencyID string, m
 // cancel the pair out to zero net effect regardless of the original Kind's
 // sign convention.
 func (m *assetManager) ReverseMovement(ctx context.Context, agencyID, movementID, performedBy, note string) (Movement, error) {
+	if performedBy == "" {
+		return Movement{}, fmt.Errorf("%w: performedBy is required — every ledger entry needs an accountable actor", ErrInvalidMovement)
+	}
 	original, err := m.GetMovement(ctx, agencyID, movementID)
 	if err != nil {
 		return Movement{}, err

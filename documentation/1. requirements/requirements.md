@@ -31,25 +31,10 @@ because that domain already proved they work for this exact problem
 | 8 | Hold semantics | Holds auto-expire (`expires_at`, needs a watchdog — same shape as `workflow_run_watchdog.go`) **and** support partial fulfillment (commit ≤ held quantity; the remainder is released automatically). |
 | 9 | v1 deliverable | A design doc (this + `2. design/architecture.md`) plus a scaffolded repo — go.mod, conventions, and the initial `schema.go`/`models.go` shape. No business logic yet. |
 | 10 | API surface | No HTTP/gRPC layer of its own — imported directly as a Go package by whatever consumes it, the same shape `mwanachama-backend-taskmanager` has (no `cmd/server`, no service boundary; a caller constructs a `DataManager` and passes it to `NewAssetManager`). Decided 2026-09-03, after A1-A8 landed. Leaves open *which* caller imports it first and whether more than one eventually does (warehouse ops tooling, a household app, the party's merchandise flows) — that's a wiring decision for whoever imports it, not something this repo needs to pre-decide. |
+| 11 | Actor identity | No modelled Actor vertex, and no auth of any kind in this package — `performed_by` (Movement) / `placed_by` (Hold) are **required** plain caller-supplied strings, validated non-empty but never interpreted. Falls straight out of decision #10: with no HTTP boundary, there's nowhere in this package for auth to live — whatever authenticates the caller already owns actor identity and is expected to hand this package an id it trusts. Required (not optional) because an un-attributed ledger entry or hold is a real gap merchandise's own `issued_by not null` invariant exists to close. Decided 2026-09-03, implemented in the same pass (`validateMovementShape`, `CreateHold`, `ReverseMovement`) — not deferred to "next session" the way #1-#9 were. |
+| 12 | Flexible-attribute mechanics | Confirmed as already implemented, not deferred: a JSON-encoded string property (`Asset.AttributesJSON`), because `entitygraph`'s `schema.PropertyType` has no object/map type (string/integer/float/number/date/datetime/boolean/uuid/option/select/multiselect/array only). Frequently-queried attributes can be promoted to first-class typed properties per domain later — that's an additive migration, not a blocker on today's shape. |
 
-## Open questions (not yet answered — next session)
+## Open questions
 
-- **Actor/auth model**: who calls this backend and how is the caller's
-  identity established? Taskmanager's `Agent` type represents an *AI agent*
-  doing project work, not a human user — the asset-manager equivalent
-  ("who moved this, who placed this hold") needs its own answer; it may not
-  be the same shape.
-- ~~**v1 MVP cut line**~~ — resolved by implementation rather than by
-  decision: `todo_done.md`'s A1-A8 built Asset, Location, Movement *and*
-  Hold together, including serialized-asset support, partial-fulfillment
-  math, and the expiry-watchdog query — nothing was cut. Left here only as
-  a record that the question was asked and answered by not needing an
-  answer, not because it's still open.
-- **Flexible-attribute mechanics**: `entitygraph`'s `schema.PropertyType` has
-  no object/map type (string/integer/float/number/date/datetime/boolean/
-  uuid/option/select/multiselect/array only — see
-  `mwanachama-backend-shared/schema/schema.go`). The "flexible attribute bag"
-  from decision #2 will likely land as a JSON-encoded string property in v1
-  (`attributes_json`), with frequently-queried attributes promoted to
-  first-class typed properties per domain later — needs to be confirmed,
-  not assumed.
+None — decisions #11-#12 above closed out the two carried over from the
+prior session (actor/auth model, flexible-attribute mechanics).

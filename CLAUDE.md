@@ -54,8 +54,19 @@ only — deeper tree/traversal correctness is Postgres-only, see
 No HTTP/gRPC layer by design (decision #10, 2026-09-03) — this stays a
 bare Go package, imported directly by whatever consumes it, the same shape
 `mwanachama-backend-taskmanager` has. Not yet imported by any specific
-caller. The actor/auth model is still open — `performed_by`/`placed_by`
-are bare strings, not edges to a modelled Actor type, on purpose.
+caller. Actor identity is decided too (#11): `performed_by`/`placed_by`
+are required, caller-supplied strings, validated non-empty but never
+interpreted — no modelled Actor type, no auth of any kind in this
+package, since decision #10 leaves nowhere for auth to live.
+
+**Verification default**: `go test ./...` (fake-backed) is the expected
+way to verify a change here, not the Postgres integration suite against a
+shared container. `postgres_integration_test.go` exists for real
+recursive-CTE/schema-validation coverage the fake can't provide, but per
+`todo_done.md`'s A8 note, don't reach for a shared `mwanachama-test-pg`-style
+container to run it without being asked — a parallel session got
+corrected for exactly that ad hoc pattern the same day this repo was
+built.
 
 ## Open questions
 

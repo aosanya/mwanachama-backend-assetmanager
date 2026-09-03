@@ -34,12 +34,14 @@
 // from the original scaffold's edge-per-reference draft — see
 // documentation/3. implementation/todo_done.md, A2.
 //
-// Deliberately NOT a typed edge or property yet: who performed a Movement
-// or placed a Hold. The actor/auth model is an open question (see
-// documentation/1. requirements/requirements.md) — performed_by/placed_by
-// are plain string properties (a denormalized external actor id), not
-// references to a modelled Actor vertex, so this schema doesn't quietly
-// commit to an auth shape nobody has decided yet.
+// Deliberately NOT a typed edge: who performed a Movement or placed a
+// Hold. performed_by/placed_by are required plain string properties (a
+// caller-supplied external actor id), not references to a modelled Actor
+// vertex — this package owns no auth model of its own (decision #10, see
+// documentation/1. requirements/requirements.md: imported as a package,
+// no HTTP boundary where auth would live). What they are NOT is optional:
+// every ledger entry and every hold needs an accountable actor, matching
+// merchandise-entry's issued_by not-null invariant.
 //
 // Storage: every entity lives in mwanachama-backend-shared's single Postgres
 // `entities` table, keyed by TypeID; TypeDefinition.StorageCollection below
@@ -177,8 +179,11 @@ func DefaultAssetSchema() schema.Schema {
 					// "departed".
 					{Name: "to_location_id", Type: schema.PropertyTypeString},
 					// performed_by is a denormalized external actor id — see the
-					// package doc's note on why this is not yet a typed edge.
-					{Name: "performed_by", Type: schema.PropertyTypeString},
+					// package doc's note on why this is not yet a typed edge. Required:
+					// every ledger entry needs an accountable actor, matching
+					// merchandise-entry's issued_by not-null invariant — see
+					// movement.go's validateMovementShape.
+					{Name: "performed_by", Type: schema.PropertyTypeString, Required: true},
 					// reverses_movement_id points at the Movement this entry mirrors,
 					// for kind = "reversed". Empty otherwise.
 					{Name: "reverses_movement_id", Type: schema.PropertyTypeString},
@@ -216,8 +221,9 @@ func DefaultAssetSchema() schema.Schema {
 					// documentation/2. design/architecture.md's Hold section.
 					{Name: "expires_at", Type: schema.PropertyTypeString, Required: true},
 					// placed_by is a denormalized external actor id — see the package
-					// doc's note on why this is not yet a typed edge.
-					{Name: "placed_by", Type: schema.PropertyTypeString},
+					// doc's note on why this is not yet a typed edge. Required: every
+					// hold needs an accountable actor — see hold.go's CreateHold.
+					{Name: "placed_by", Type: schema.PropertyTypeString, Required: true},
 					{Name: "created_at", Type: schema.PropertyTypeString},
 					{Name: "updated_at", Type: schema.PropertyTypeString},
 				},

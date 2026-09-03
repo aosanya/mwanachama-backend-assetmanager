@@ -106,12 +106,12 @@ func TestDeleteAsset_OpenHoldsBlocks(t *testing.T) {
 	loc, _ := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Shelf"})
 	a, _ := m.CreateAsset(ctx, testAgency, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 10, ToLocationID: loc.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 10, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
 	if _, err := m.CreateHold(ctx, testAgency, mwanachamaassetmanager.Hold{
-		AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: futureRFC3339(t),
+		AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: futureRFC3339(t), PlacedBy: testActor,
 	}); err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}

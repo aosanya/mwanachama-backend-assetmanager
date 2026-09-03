@@ -121,12 +121,12 @@ func TestPostgres_MovementLedger_BalanceFold(t *testing.T) {
 	}
 
 	if _, err := mgr.PostMovement(ctx, agencyID, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
 	if _, err := mgr.PostMovement(ctx, agencyID, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement transferred: %v", err)
 	}
@@ -204,13 +204,13 @@ func TestPostgres_HoldLifecycle(t *testing.T) {
 		t.Fatalf("CreateAsset: %v", err)
 	}
 	if _, err := mgr.PostMovement(ctx, agencyID, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID,
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement: %v", err)
 	}
 
 	h, err := mgr.CreateHold(ctx, agencyID, mwanachamaassetmanager.Hold{
-		AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+		AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: time.Now().UTC().Add(time.Hour).Format(time.RFC3339), PlacedBy: "pg-actor",
 	})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)

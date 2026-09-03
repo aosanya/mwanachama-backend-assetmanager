@@ -51,10 +51,11 @@ Tests: `fake_test.go` (in-memory `DataManager`, single-hop `TraverseGraph`
 only — deeper tree/traversal correctness is Postgres-only, see
 `postgres_integration_test.go`).
 
-Not yet done: any HTTP/gRPC wiring (this is a bare Go package right now,
-like taskmanager before its gateway integration), and the actor/auth model
-is still open — `performed_by`/`placed_by` are bare strings, not edges to
-a modelled Actor type, on purpose.
+No HTTP/gRPC layer by design (decision #10, 2026-09-03) — this stays a
+bare Go package, imported directly by whatever consumes it, the same shape
+`mwanachama-backend-taskmanager` has. Not yet imported by any specific
+caller. The actor/auth model is still open — `performed_by`/`placed_by`
+are bare strings, not edges to a modelled Actor type, on purpose.
 
 ## Open questions
 

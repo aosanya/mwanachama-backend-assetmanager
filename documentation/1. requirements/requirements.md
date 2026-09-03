@@ -30,6 +30,7 @@ because that domain already proved they work for this exact problem
 | 7 | Reservations | In scope for v1. A Hold reserves a quantity/asset before it actually moves (checkout, order picking) — not just "record what moved". |
 | 8 | Hold semantics | Holds auto-expire (`expires_at`, needs a watchdog — same shape as `workflow_run_watchdog.go`) **and** support partial fulfillment (commit ≤ held quantity; the remainder is released automatically). |
 | 9 | v1 deliverable | A design doc (this + `2. design/architecture.md`) plus a scaffolded repo — go.mod, conventions, and the initial `schema.go`/`models.go` shape. No business logic yet. |
+| 10 | API surface | No HTTP/gRPC layer of its own — imported directly as a Go package by whatever consumes it, the same shape `mwanachama-backend-taskmanager` has (no `cmd/server`, no service boundary; a caller constructs a `DataManager` and passes it to `NewAssetManager`). Decided 2026-09-03, after A1-A8 landed. Leaves open *which* caller imports it first and whether more than one eventually does (warehouse ops tooling, a household app, the party's merchandise flows) — that's a wiring decision for whoever imports it, not something this repo needs to pre-decide. |
 
 ## Open questions (not yet answered — next session)
 
@@ -38,15 +39,12 @@ because that domain already proved they work for this exact problem
   doing project work, not a human user — the asset-manager equivalent
   ("who moved this, who placed this hold") needs its own answer; it may not
   be the same shape.
-- **API surface**: HTTP handlers of its own (taskmanager has none — it's
-  imported directly as a Go package by `mwanachama-backend-api-gateway`), or
-  does this need its own gateway/service boundary from day one, given it
-  will likely be consumed by more than one kind of frontend (warehouse
-  ops tooling, a household app, eventually the party's merchandise flows)?
-- **v1 MVP cut line**: which of Asset / Location / Movement / Hold ship
-  first, and what's explicitly deferred (e.g. serialized-asset support,
-  partial-fulfillment math, the expiry watchdog) so v1 doesn't try to build
-  all of §7/§8 at once.
+- ~~**v1 MVP cut line**~~ — resolved by implementation rather than by
+  decision: `todo_done.md`'s A1-A8 built Asset, Location, Movement *and*
+  Hold together, including serialized-asset support, partial-fulfillment
+  math, and the expiry-watchdog query — nothing was cut. Left here only as
+  a record that the question was asked and answered by not needing an
+  answer, not because it's still open.
 - **Flexible-attribute mechanics**: `entitygraph`'s `schema.PropertyType` has
   no object/map type (string/integer/float/number/date/datetime/boolean/
   uuid/option/select/multiselect/array only — see

@@ -25,5 +25,7 @@ existing merchandise domain without a schema rewrite — see
 
 Currently: core Location/Asset/Movement/Hold business logic implemented and
 tested (unit tests + Postgres integration tests, see `todo_done.md`'s A8).
-Not yet wired into any HTTP/gRPC layer or a real caller — that, and the
-actor/auth model, are the open questions in `1. requirements/requirements.md`.
+No HTTP/gRPC layer of its own by design (decision #10) — imported directly
+as a Go package, same as `mwanachama-backend-taskmanager` — and not yet
+imported by any specific caller. The actor/auth model is the remaining
+open question in `1. requirements/requirements.md`.

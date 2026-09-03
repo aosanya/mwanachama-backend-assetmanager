@@ -18,5 +18,7 @@ backed by `entitygraph.DataManager`. Tested against both an in-memory fake
 and real Postgres (40 tests, `go test -race ./...` clean). See
 [documentation/](documentation/) for the requirements/architecture write-up
 and [documentation/3. implementation/todo_done.md](documentation/3.%20implementation/todo_done.md)
-for what shipped. Not yet wired into any HTTP/gRPC layer, and the
-actor/auth model is still an open question — see requirements.md.
+for what shipped. No HTTP/gRPC layer of its own by design — imported
+directly as a Go package, same as `mwanachama-backend-taskmanager` — and
+not yet imported by any specific caller. The actor/auth model is still an
+open question — see requirements.md.

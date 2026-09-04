@@ -6,22 +6,14 @@ import (
 	"testing"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
+	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
-
-func newTestManager(t *testing.T) mwanachamaassetmanager.AssetManager {
-	t.Helper()
-	m, err := mwanachamaassetmanager.NewAssetManager(newFakeDataManager())
-	if err != nil {
-		t.Fatalf("NewAssetManager: %v", err)
-	}
-	return m
-}
 
 func TestCreateLocation_Root(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	loc, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Main Warehouse", Kind: "warehouse"})
+	loc, err := m.CreateLocation(ctx, models.Location{Name: "Main Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
@@ -37,7 +29,7 @@ func TestCreateLocation_MissingName(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Kind: "bin"})
+	_, err := m.CreateLocation(ctx, models.Location{Kind: "bin"})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidLocation) {
 		t.Fatalf("expected ErrInvalidLocation, got %v", err)
 	}
@@ -47,7 +39,7 @@ func TestCreateLocation_ParentNotFound(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Bin 1", ParentLocationID: "does-not-exist"})
+	_, err := m.CreateLocation(ctx, models.Location{Name: "Bin 1", ParentLocationID: "does-not-exist"})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidLocation) {
 		t.Fatalf("expected ErrInvalidLocation, got %v", err)
 	}
@@ -57,11 +49,11 @@ func TestCreateLocation_WithParent(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	parent, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
+	parent, err := m.CreateLocation(ctx, models.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation parent: %v", err)
 	}
-	child, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: parent.ID})
+	child, err := m.CreateLocation(ctx, models.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: parent.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation child: %v", err)
 	}
@@ -80,27 +72,23 @@ func TestCreateLocation_WithParent(t *testing.T) {
 
 // TestListDescendantLocations_MultiLevelFanOut proves the hand-rolled BFS
 // in location.go (ListDescendantLocations) correctly walks more than one
-// hop against the fake DataManager — unlike the old entitygraph.TraverseGraph
-// call this replaced, the walk no longer depends on any backend-specific
-// traversal helper, so the fake (plain ListRelationships/GetEntity) can
-// honestly exercise multi-level trees, not just the single-hop case the
-// rest of this file covers. Builds a 4-level tree with a wide fan-out at
-// level 2 (warehouse -> 3 aisles -> 2 bins each -> 1 item under one bin) and
-// checks both the full descendant set (order-independent membership) and
-// that the start node itself is excluded.
+// hop. Builds a 4-level tree with a wide fan-out at level 2 (warehouse -> 3
+// aisles -> 2 bins each -> 1 item under one bin) and checks both the full
+// descendant set (order-independent membership) and that the start node
+// itself is excluded.
 func TestListDescendantLocations_MultiLevelFanOut(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	warehouse, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse"})
+	warehouse, err := m.CreateLocation(ctx, models.Location{Name: "Warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation warehouse: %v", err)
 	}
 
 	wantIDs := map[string]bool{}
-	var deepestBin mwanachamaassetmanager.Location
+	var deepestBin models.Location
 	for a := 0; a < 3; a++ {
-		aisle, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{
+		aisle, err := m.CreateLocation(ctx, models.Location{
 			Name: "Aisle", ParentLocationID: warehouse.ID,
 		})
 		if err != nil {
@@ -108,7 +96,7 @@ func TestListDescendantLocations_MultiLevelFanOut(t *testing.T) {
 		}
 		wantIDs[aisle.ID] = true
 		for b := 0; b < 2; b++ {
-			bin, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{
+			bin, err := m.CreateLocation(ctx, models.Location{
 				Name: "Bin", ParentLocationID: aisle.ID,
 			})
 			if err != nil {
@@ -120,7 +108,7 @@ func TestListDescendantLocations_MultiLevelFanOut(t *testing.T) {
 	}
 	// A fourth level under just one bin, to prove the walk doesn't stop
 	// after a fixed number of hops regardless of fan-out elsewhere.
-	shelf, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{
+	shelf, err := m.CreateLocation(ctx, models.Location{
 		Name: "Shelf", ParentLocationID: deepestBin.ID,
 	})
 	if err != nil {
@@ -167,9 +155,9 @@ func TestUpdateLocation_Reparent(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	warehouseA, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse A"})
-	warehouseB, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse B"})
-	bin, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Bin 1", ParentLocationID: warehouseA.ID})
+	warehouseA, _ := m.CreateLocation(ctx, models.Location{Name: "Warehouse A"})
+	warehouseB, _ := m.CreateLocation(ctx, models.Location{Name: "Warehouse B"})
+	bin, err := m.CreateLocation(ctx, models.Location{Name: "Bin 1", ParentLocationID: warehouseA.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation bin: %v", err)
 	}
@@ -197,7 +185,7 @@ func TestUpdateLocation_SelfParentRejected(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	loc, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Loop"})
+	loc, _ := m.CreateLocation(ctx, models.Location{Name: "Loop"})
 	loc.ParentLocationID = loc.ID
 	_, err := m.UpdateLocation(ctx, loc)
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidLocation) {
@@ -209,13 +197,12 @@ func TestUpdateLocation_DescendantCycleRejected(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	parent, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Parent"})
-	child, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Child", ParentLocationID: parent.ID})
+	parent, _ := m.CreateLocation(ctx, models.Location{Name: "Parent"})
+	child, _ := m.CreateLocation(ctx, models.Location{Name: "Child", ParentLocationID: parent.ID})
 
 	// Attempt to make parent a child of its own direct child — a one-hop
-	// cycle, which the fake's single-hop TraverseGraph can detect. Deeper
-	// (multi-hop) cycle rejection is only provable against a real
-	// recursive-CTE-backed DataManager — see postgres_integration_test.go.
+	// cycle. See TestPostgres_ListDescendantLocations_MultiLevel for the
+	// multi-hop case against real Postgres.
 	parent.ParentLocationID = child.ID
 	_, err := m.UpdateLocation(ctx, parent)
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidLocation) {
@@ -227,8 +214,8 @@ func TestDeleteLocation_NotEmptyWithChildren(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	parent, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Parent"})
-	_, _ = m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Child", ParentLocationID: parent.ID})
+	parent, _ := m.CreateLocation(ctx, models.Location{Name: "Parent"})
+	_, _ = m.CreateLocation(ctx, models.Location{Name: "Child", ParentLocationID: parent.ID})
 
 	err := m.DeleteLocation(ctx, parent.ID)
 	if !errors.Is(err, mwanachamaassetmanager.ErrLocationNotEmpty) {
@@ -240,9 +227,9 @@ func TestDeleteLocation_NotEmptyWithAssets(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	loc, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Pantry"})
-	_, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
-		Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, LocationID: loc.ID,
+	loc, _ := m.CreateLocation(ctx, models.Location{Name: "Pantry"})
+	_, err := m.CreateAsset(ctx, models.Asset{
+		Name: "Rice", TrackingMode: models.AssetTrackingModeFungible, LocationID: loc.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
@@ -257,7 +244,7 @@ func TestDeleteLocation_OK(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	loc, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Empty Shelf"})
+	loc, _ := m.CreateLocation(ctx, models.Location{Name: "Empty Shelf"})
 	if err := m.DeleteLocation(ctx, loc.ID); err != nil {
 		t.Fatalf("DeleteLocation: %v", err)
 	}
@@ -270,8 +257,8 @@ func TestListLocations_RootOnly(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	root, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Root"})
-	_, _ = m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Child", ParentLocationID: root.ID})
+	root, _ := m.CreateLocation(ctx, models.Location{Name: "Root"})
+	_, _ = m.CreateLocation(ctx, models.Location{Name: "Child", ParentLocationID: root.ID})
 
 	roots, err := m.ListLocations(ctx, mwanachamaassetmanager.LocationFilter{RootOnly: true})
 	if err != nil {

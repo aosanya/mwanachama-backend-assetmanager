@@ -4,6 +4,14 @@ Companion to [`1. requirements/requirements.md`](../1.%20requirements/requiremen
 This is the shape agreed in the 2026-09-03 research session and — as of
 `todo_done.md`'s A1-A8 — built and tested. One shape decision changed
 between the research session and the implementation; see "Core types"
+
+**Updated 2026-09-04 (A10)**: storage moved off `entitygraph` onto GORM —
+see `todo_done.md`'s A10 and `CLAUDE.md`. The tenancy line and `child_of`
+graph edge described below are what the 2026-09-03 session agreed and no
+longer match what's built: this repo is now single-tenant, and `Location`'s
+parent is a plain `parent_location_id` column, not a graph edge — kept
+here as the historical record of the original design, not the current
+shape.
 below and A3 in `../3. implementation/todo_done.md` for why.
 
 ## Core types

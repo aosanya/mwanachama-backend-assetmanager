@@ -1,40 +1,35 @@
 // postgres_integration_test.go exercises AssetManager against a real
-// Postgres-backed entitygraph.DataManager (mwanachama-backend-shared's
-// postgres.Backend), rather than the in-memory fakeDataManager the rest of
-// this package's tests use.
+// Postgres database, rather than the in-memory sqlite-backed manager the
+// rest of this package's tests use.
 //
-// Skipped unless POSTGRES_URL is set — mirrors mwanachama-backend-shared's
-// own postgres/backend_test.go split, the same pattern
-// mwanachama-backend-taskmanager's postgres_integration_test.go uses. The
-// unit tests elsewhere in this package already exhaustively cover
-// AssetManager's business logic against fakeDataManager; this file's job is
-// narrower — prove the real Postgres wiring works end-to-end, and
+// Skipped unless POSTGRES_URL is set. The unit tests elsewhere in this
+// package already exhaustively cover AssetManager's business logic; this
+// file's job is narrower — prove the real Postgres wiring (GORM
+// AutoMigrate, the serial_tag partial unique index) works end-to-end, and
 // specifically prove multi-level ListDescendantLocations against a real
-// database (not something the fake honestly needs to exercise now that the
-// BFS in location.go drives the walk itself via ListRelationships/
-// GetEntity rather than a backend-specific traversal).
+// database.
 package mwanachamaassetmanager_test
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"testing"
 	"time"
 
+	gormpostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
+	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 	"github.com/aosanya/mwanachama-backend-shared/postgres"
 )
 
-func applyAssetDDL(ctx context.Context, db *sql.DB, script string) error {
-	_, err := db.ExecContext(ctx, script)
-	return err
-}
-
-// newPostgresAssetManager opens POSTGRES_URL, creates a scratch set of
-// assetit_-prefixed tables, seeds+activates DefaultAssetSchema, and returns
-// a ready-to-use AssetManager. Skips the calling test if POSTGRES_URL is
-// unset. Tables are dropped on cleanup.
+// newPostgresAssetManager opens POSTGRES_URL via
+// mwanachama-backend-shared/postgres.Open (the same DSN parsing, pgx
+// driver, and pooling every other repo already uses), wraps that connection
+// with GORM's Postgres dialector, migrates a unique-enough table prefix,
+// and returns a ready-to-use AssetManager. Skips the calling test if
+// POSTGRES_URL is unset. Tables are dropped on cleanup.
 func newPostgresAssetManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	t.Helper()
 	dsn := os.Getenv("POSTGRES_URL")
@@ -43,34 +38,28 @@ func newPostgresAssetManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	}
 
 	ctx := context.Background()
-	db, err := postgres.Open(ctx, postgres.Config{DSN: dsn})
+	sqlDB, err := postgres.Open(ctx, postgres.Config{DSN: dsn})
 	if err != nil {
-		t.Fatalf("Open: %v", err)
+		t.Fatalf("postgres.Open: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	tables := postgres.DefaultTableNames("assetit_")
-	if err := applyAssetDDL(ctx, db, postgres.DDL(tables)); err != nil {
-		t.Fatalf("applying DDL: %v", err)
+	db, err := gorm.Open(gormpostgres.New(gormpostgres.Config{Conn: sqlDB}), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("gorm.Open: %v", err)
+	}
+
+	// A unique-enough prefix per test keeps concurrent -run invocations from
+	// colliding on the same physical tables.
+	tables := mwanachamaassetmanager.DefaultTableNames("assetit")
+	if err := mwanachamaassetmanager.Migrate(db, tables); err != nil {
+		t.Fatalf("Migrate: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = applyAssetDDL(context.Background(), db, postgres.DropDDL(tables))
+		_ = db.Migrator().DropTable(tables.Holds, tables.Movements, tables.Assets, tables.Locations)
 	})
 
-	backend := postgres.NewBackend(db, tables)
-
-	s := mwanachamaassetmanager.DefaultAssetSchema()
-	if err := backend.SetSchema(ctx, s); err != nil {
-		t.Fatalf("SetSchema: %v", err)
-	}
-	if err := backend.Publish(ctx); err != nil {
-		t.Fatalf("Publish: %v", err)
-	}
-	if err := backend.Activate(ctx, 1); err != nil {
-		t.Fatalf("Activate: %v", err)
-	}
-
-	mgr, err := mwanachamaassetmanager.NewAssetManager(backend)
+	mgr, err := mwanachamaassetmanager.NewAssetManager(db, tables)
 	if err != nil {
 		t.Fatalf("NewAssetManager: %v", err)
 	}
@@ -81,12 +70,12 @@ func TestPostgres_LocationAndAssetCRUD_RoundTrip(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	loc, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
+	loc, err := mgr.CreateLocation(ctx, models.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{
-		Name: "Rice, 50kg bag", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, LocationID: loc.ID,
+	a, err := mgr.CreateAsset(ctx, models.Asset{
+		Name: "Rice, 50kg bag", TrackingMode: models.AssetTrackingModeFungible, LocationID: loc.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
@@ -105,26 +94,26 @@ func TestPostgres_MovementLedger_BalanceFold(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	warehouse, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse"})
+	warehouse, err := mgr.CreateLocation(ctx, models.Location{Name: "Warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	shop, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop"})
+	shop, err := mgr.CreateLocation(ctx, models.Location{Name: "Shop"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	a, err := mgr.CreateAsset(ctx, models.Asset{Name: "Rice", TrackingMode: models.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
 
-	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID, PerformedBy: "pg-actor",
+	if _, err := mgr.PostMovement(ctx, models.Movement{
+		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
-	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: "pg-actor",
+	if _, err := mgr.PostMovement(ctx, models.Movement{
+		AssetID: a.ID, Kind: models.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement transferred: %v", err)
 	}
@@ -149,15 +138,15 @@ func TestPostgres_ListDescendantLocations_MultiLevel(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	warehouse, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
+	warehouse, err := mgr.CreateLocation(ctx, models.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation warehouse: %v", err)
 	}
-	aisle, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Aisle 3", Kind: "aisle", ParentLocationID: warehouse.ID})
+	aisle, err := mgr.CreateLocation(ctx, models.Location{Name: "Aisle 3", Kind: "aisle", ParentLocationID: warehouse.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation aisle: %v", err)
 	}
-	bin, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: aisle.ID})
+	bin, err := mgr.CreateLocation(ctx, models.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: aisle.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation bin: %v", err)
 	}
@@ -190,31 +179,31 @@ func TestPostgres_HoldLifecycle(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	loc, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop floor"})
+	loc, err := mgr.CreateLocation(ctx, models.Location{Name: "Shop floor"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "T-shirt M", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	a, err := mgr.CreateAsset(ctx, models.Asset{Name: "T-shirt M", TrackingMode: models.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
-	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
-		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: "pg-actor",
+	if _, err := mgr.PostMovement(ctx, models.Movement{
+		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement: %v", err)
 	}
 
-	h, err := mgr.CreateHold(ctx, mwanachamaassetmanager.Hold{
+	h, err := mgr.CreateHold(ctx, models.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: time.Now().UTC().Add(time.Hour).Format(time.RFC3339), PlacedBy: "pg-actor",
 	})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}
-	committed, _, err := mgr.CommitHold(ctx, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "checkout")
+	committed, _, err := mgr.CommitHold(ctx, h.ID, 10, models.MovementKindDeparted, "", "checkout")
 	if err != nil {
 		t.Fatalf("CommitHold: %v", err)
 	}
-	if committed.Status != mwanachamaassetmanager.HoldStatusCommitted {
+	if committed.Status != models.HoldStatusCommitted {
 		t.Fatalf("expected committed, got %q", committed.Status)
 	}
 

@@ -13,22 +13,24 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
-// ListHoldsExpiredAsOf returns every [HoldStatusReserved] Hold whose
+// ListHoldsExpiredAsOf returns every [models.HoldStatusReserved] Hold whose
 // ExpiresAt is at or before cutoffRFC3339 (an RFC 3339 timestamp — the
 // sweeper's own idea of "now", passed in rather than read here so a test
 // can simulate time passing without a real clock).
-func (m *assetManager) ListHoldsExpiredAsOf(ctx context.Context, cutoffRFC3339 string) ([]Hold, error) {
+func (m *assetManager) ListHoldsExpiredAsOf(ctx context.Context, cutoffRFC3339 string) ([]models.Hold, error) {
 	cutoff, err := time.Parse(time.RFC3339, cutoffRFC3339)
 	if err != nil {
 		return nil, fmt.Errorf("ListHoldsExpiredAsOf: cutoff must be RFC 3339: %w", err)
 	}
-	open, err := m.ListHolds(ctx, HoldFilter{Status: HoldStatusReserved})
+	open, err := m.ListHolds(ctx, HoldFilter{Status: models.HoldStatusReserved})
 	if err != nil {
 		return nil, fmt.Errorf("ListHoldsExpiredAsOf: %w", err)
 	}
-	var out []Hold
+	var out []models.Hold
 	for _, h := range open {
 		expiresAt, err := time.Parse(time.RFC3339, h.ExpiresAt)
 		if err != nil {

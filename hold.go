@@ -3,9 +3,9 @@
 // A Hold is single-shot: [assetManager.CommitHold] is called at most once
 // per hold, committing up to its full reserved Quantity in that one call —
 // whatever isn't committed is released in the same call, matching
-// [HoldStatus.CanTransitionTo]'s transition table (every transition out of
-// reserved is terminal; there is no partially_committed → committed path
-// for a second, later commit).
+// [models.HoldStatus.CanTransitionTo]'s transition table (every transition
+// out of reserved is terminal; there is no partially_committed →
+// committed path for a second, later commit).
 package mwanachamaassetmanager
 
 import (
@@ -14,63 +14,63 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aosanya/mwanachama-backend-shared/entitygraph"
+	"gorm.io/gorm"
+
+	"github.com/aosanya/mwanachama-backend-assetmanager/gormstore"
+	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 // CreateHold reserves h.Quantity of h.AssetID at h.LocationID (required —
 // availability is only meaningful against a specific location) until
 // h.ExpiresAt, provided that much is actually available: the asset's
 // balance at that location minus what every other still-open
-// ([HoldStatusReserved]) hold there has already reserved.
-func (m *assetManager) CreateHold(ctx context.Context, h Hold) (Hold, error) {
+// ([models.HoldStatusReserved]) hold there has already reserved.
+func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Hold, error) {
 	if h.AssetID == "" {
-		return Hold{}, fmt.Errorf("%w: AssetID is required", ErrInvalidHold)
+		return models.Hold{}, fmt.Errorf("%w: AssetID is required", ErrInvalidHold)
 	}
 	if h.LocationID == "" {
-		return Hold{}, fmt.Errorf("%w: LocationID is required", ErrInvalidHold)
+		return models.Hold{}, fmt.Errorf("%w: LocationID is required", ErrInvalidHold)
 	}
 	if h.Quantity <= 0 {
-		return Hold{}, fmt.Errorf("%w: Quantity must be positive", ErrInvalidHold)
+		return models.Hold{}, fmt.Errorf("%w: Quantity must be positive", ErrInvalidHold)
 	}
 	if h.PlacedBy == "" {
-		return Hold{}, fmt.Errorf("%w: PlacedBy is required — every hold needs an accountable actor", ErrInvalidHold)
+		return models.Hold{}, fmt.Errorf("%w: PlacedBy is required — every hold needs an accountable actor", ErrInvalidHold)
 	}
 	expiresAt, err := time.Parse(time.RFC3339, h.ExpiresAt)
 	if err != nil {
-		return Hold{}, fmt.Errorf("%w: ExpiresAt must be RFC 3339: %v", ErrInvalidHold, err)
+		return models.Hold{}, fmt.Errorf("%w: ExpiresAt must be RFC 3339: %v", ErrInvalidHold, err)
 	}
 	if !expiresAt.After(time.Now().UTC()) {
-		return Hold{}, fmt.Errorf("%w: ExpiresAt must be in the future", ErrInvalidHold)
+		return models.Hold{}, fmt.Errorf("%w: ExpiresAt must be in the future", ErrInvalidHold)
 	}
 	if _, err := m.GetAsset(ctx, h.AssetID); err != nil {
-		return Hold{}, err
+		return models.Hold{}, err
 	}
 	if _, err := m.GetLocation(ctx, h.LocationID); err != nil {
-		return Hold{}, err
+		return models.Hold{}, err
 	}
 
 	available, err := m.availableQuantity(ctx, h.AssetID, h.LocationID)
 	if err != nil {
-		return Hold{}, fmt.Errorf("CreateHold: %w", err)
+		return models.Hold{}, fmt.Errorf("CreateHold: %w", err)
 	}
 	if h.Quantity > available {
-		return Hold{}, fmt.Errorf("%w: requested %d, available %d", ErrInsufficientAvailable, h.Quantity, available)
+		return models.Hold{}, fmt.Errorf("%w: requested %d, available %d", ErrInsufficientAvailable, h.Quantity, available)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	h.Status = HoldStatusReserved
+	h.Status = models.HoldStatusReserved
 	h.CommittedQuantity = 0
 	h.CreatedAt = now
 	h.UpdatedAt = now
 
-	created, err := m.dm.CreateEntity(ctx, entitygraph.CreateEntityRequest{
-		TypeID:     holdTypeID,
-		Properties: holdToProperties(h),
-	})
-	if err != nil {
-		return Hold{}, fmt.Errorf("CreateHold: %w", err)
+	row := gormstore.HoldToRow(h)
+	if err := m.db.WithContext(ctx).Table(m.tables.Holds).Create(&row).Error; err != nil {
+		return models.Hold{}, fmt.Errorf("CreateHold: %w", err)
 	}
-	return holdFromEntity(created), nil
+	return gormstore.HoldFromRow(row), nil
 }
 
 // availableQuantity is the asset's balance at locationID minus the
@@ -82,7 +82,7 @@ func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationI
 	if err != nil {
 		return 0, err
 	}
-	openHolds, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, LocationID: locationID, Status: HoldStatusReserved})
+	openHolds, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, LocationID: locationID, Status: models.HoldStatusReserved})
 	if err != nil {
 		return 0, err
 	}
@@ -93,45 +93,43 @@ func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationI
 	return balance - reserved, nil
 }
 
-// GetHold reads a single Hold entity from the graph.
-func (m *assetManager) GetHold(ctx context.Context, holdID string) (Hold, error) {
-	e, err := m.dm.GetEntity(ctx, holdID)
+// GetHold reads a single Hold row.
+func (m *assetManager) GetHold(ctx context.Context, holdID string) (models.Hold, error) {
+	var row gormstore.HoldRow
+	err := m.db.WithContext(ctx).Table(m.tables.Holds).Where("id = ?", holdID).First(&row).Error
 	if err != nil {
-		if errors.Is(err, entitygraph.ErrEntityNotFound) {
-			return Hold{}, ErrHoldNotFound
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return models.Hold{}, ErrHoldNotFound
 		}
-		return Hold{}, fmt.Errorf("GetHold: %w", err)
+		return models.Hold{}, fmt.Errorf("GetHold: %w", err)
 	}
-	if e.TypeID != holdTypeID {
-		return Hold{}, ErrHoldNotFound
-	}
-	return holdFromEntity(e), nil
+	return gormstore.HoldFromRow(row), nil
 }
 
 // CommitHold fulfills a reserved Hold — up to quantity of it — by posting a
-// Movement of the given kind (must be [MovementKindDeparted] or
-// [MovementKindTransferred]; committing a hold always removes stock from
-// where it was held) from the hold's LocationID, to toLocationID when kind
-// is transferred. quantity may be less than the hold's full reserved
+// Movement of the given kind (must be [models.MovementKindDeparted] or
+// [models.MovementKindTransferred]; committing a hold always removes stock
+// from where it was held) from the hold's LocationID, to toLocationID when
+// kind is transferred. quantity may be less than the hold's full reserved
 // amount; whatever's left is released in this same call — see the package
 // doc for why there is no later, second commit on the same hold.
-func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity int64, kind MovementKind, toLocationID, performedBy string) (Hold, Movement, error) {
+func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity int64, kind models.MovementKind, toLocationID, performedBy string) (models.Hold, models.Movement, error) {
 	hold, err := m.GetHold(ctx, holdID)
 	if err != nil {
-		return Hold{}, Movement{}, err
+		return models.Hold{}, models.Movement{}, err
 	}
-	if hold.Status != HoldStatusReserved {
-		return Hold{}, Movement{}, ErrInvalidHoldStatusTransition
+	if hold.Status != models.HoldStatusReserved {
+		return models.Hold{}, models.Movement{}, ErrInvalidHoldStatusTransition
 	}
 	if quantity <= 0 || quantity > hold.Quantity {
-		return Hold{}, Movement{}, fmt.Errorf("%w: quantity must be in (0, %d]", ErrInvalidHold, hold.Quantity)
+		return models.Hold{}, models.Movement{}, fmt.Errorf("%w: quantity must be in (0, %d]", ErrInvalidHold, hold.Quantity)
 	}
-	if kind != MovementKindDeparted && kind != MovementKindTransferred {
-		return Hold{}, Movement{}, fmt.Errorf("%w: CommitHold requires kind %q or %q, got %q",
-			ErrInvalidMovement, MovementKindDeparted, MovementKindTransferred, kind)
+	if kind != models.MovementKindDeparted && kind != models.MovementKindTransferred {
+		return models.Hold{}, models.Movement{}, fmt.Errorf("%w: CommitHold requires kind %q or %q, got %q",
+			ErrInvalidMovement, models.MovementKindDeparted, models.MovementKindTransferred, kind)
 	}
 
-	mv := Movement{
+	mv := models.Movement{
 		AssetID:        hold.AssetID,
 		Kind:           kind,
 		Quantity:       quantity,
@@ -141,82 +139,77 @@ func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity i
 	}
 	movement, err := m.PostMovement(ctx, mv)
 	if err != nil {
-		return Hold{}, Movement{}, fmt.Errorf("CommitHold: %w", err)
+		return models.Hold{}, models.Movement{}, fmt.Errorf("CommitHold: %w", err)
 	}
 
 	hold.CommittedQuantity = quantity
 	if quantity == hold.Quantity {
-		hold.Status = HoldStatusCommitted
+		hold.Status = models.HoldStatusCommitted
 	} else {
-		hold.Status = HoldStatusPartiallyCommitted
+		hold.Status = models.HoldStatusPartiallyCommitted
 	}
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	updated, err := m.dm.UpdateEntity(ctx, hold.ID, entitygraph.UpdateEntityRequest{
-		Properties: map[string]any{
+	err = m.db.WithContext(ctx).Table(m.tables.Holds).Where("id = ?", hold.ID).
+		Updates(map[string]any{
 			"status":             string(hold.Status),
 			"committed_quantity": hold.CommittedQuantity,
 			"updated_at":         hold.UpdatedAt,
-		},
-	})
+		}).Error
 	if err != nil {
-		return Hold{}, movement, fmt.Errorf("CommitHold: movement posted (id=%s) but hold update failed: %w", movement.ID, err)
+		return models.Hold{}, movement, fmt.Errorf("CommitHold: movement posted (id=%s) but hold update failed: %w", movement.ID, err)
 	}
-	return holdFromEntity(updated), movement, nil
+	return hold, movement, nil
 }
 
 // ReleaseHold releases a reserved Hold with nothing committed — manual
 // release, or the outcome the watchdog applies once ExpiresAt has passed
 // (see hold_watchdog.go).
-func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (Hold, error) {
+func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (models.Hold, error) {
 	hold, err := m.GetHold(ctx, holdID)
 	if err != nil {
-		return Hold{}, err
+		return models.Hold{}, err
 	}
-	if hold.Status != HoldStatusReserved {
-		return Hold{}, ErrInvalidHoldStatusTransition
+	if hold.Status != models.HoldStatusReserved {
+		return models.Hold{}, ErrInvalidHoldStatusTransition
 	}
-	hold.Status = HoldStatusReleased
+	hold.Status = models.HoldStatusReleased
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	updated, err := m.dm.UpdateEntity(ctx, hold.ID, entitygraph.UpdateEntityRequest{
-		Properties: map[string]any{
+	err = m.db.WithContext(ctx).Table(m.tables.Holds).Where("id = ?", hold.ID).
+		Updates(map[string]any{
 			"status":     string(hold.Status),
 			"updated_at": hold.UpdatedAt,
-		},
-	})
+		}).Error
 	if err != nil {
-		if errors.Is(err, entitygraph.ErrEntityNotFound) {
-			return Hold{}, ErrHoldNotFound
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return models.Hold{}, ErrHoldNotFound
 		}
-		return Hold{}, fmt.Errorf("ReleaseHold: %w", err)
+		return models.Hold{}, fmt.Errorf("ReleaseHold: %w", err)
 	}
-	return holdFromEntity(updated), nil
+	return hold, nil
 }
 
-// ListHolds returns all non-deleted Hold entities that match the filter.
-func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]Hold, error) {
-	props := map[string]any{}
+// ListHolds returns all Hold rows that match the filter, id order.
+func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]models.Hold, error) {
+	q := m.db.WithContext(ctx).Table(m.tables.Holds)
 	if filter.AssetID != "" {
-		props["asset_id"] = filter.AssetID
+		q = q.Where("asset_id = ?", filter.AssetID)
 	}
 	if filter.LocationID != "" {
-		props["location_id"] = filter.LocationID
+		q = q.Where("location_id = ?", filter.LocationID)
 	}
 	if filter.Status != "" {
-		props["status"] = string(filter.Status)
+		q = q.Where("status = ?", string(filter.Status))
 	}
 
-	entities, err := m.dm.ListEntities(ctx, entitygraph.EntityFilter{
-		TypeID:     holdTypeID,
-		Properties: props,
-	})
-	if err != nil {
+	var rows []gormstore.HoldRow
+	if err := q.Order("id").Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("ListHolds: %w", err)
 	}
-	out := make([]Hold, 0, len(entities))
-	for _, e := range entities {
-		out = append(out, holdFromEntity(e))
+	out := make([]models.Hold, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, gormstore.HoldFromRow(r))
 	}
 	return out, nil
 }

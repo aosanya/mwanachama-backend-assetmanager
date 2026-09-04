@@ -2,9 +2,8 @@
 //
 // This file exposes [DefaultAssetSchema], which returns the fixed
 // [schema.Schema] for mwanachama-backend-assetmanager. Wiring code in
-// whatever imports this package seeds this schema per agency at startup via
-// SchemaManager.SetSchema (set s.AgencyID before calling; DefaultAssetSchema
-// itself returns an agency-agnostic template) — same pattern as
+// whatever imports this package seeds this schema at startup via
+// SchemaManager.SetSchema — same pattern as
 // mwanachama-backend-taskmanager's DefaultWorkSchema.
 //
 // The schema declares four TypeDefinitions:
@@ -129,9 +128,9 @@ func DefaultAssetSchema() schema.Schema {
 					// interpreted. See [AssetTrackingMode].
 					// Well-known values: "serialized", "fungible".
 					{Name: "tracking_mode", Type: schema.PropertyTypeOption, Required: true, Options: []string{"serialized", "fungible"}},
-					// serial_tag is the unique-per-agency tag/serial for a serialized
-					// Asset (e.g. an ear tag, an equipment serial number). Empty for
-					// fungible Assets.
+					// serial_tag is the unique tag/serial for a serialized Asset (e.g.
+					// an ear tag, an equipment serial number). Empty for fungible
+					// Assets.
 					{Name: "serial_tag", Type: schema.PropertyTypeString},
 					// category is a free-form grouping label (e.g. "livestock", "grocery",
 					// "electronics"). Not schema-enforced — see requirements.md's

@@ -3,7 +3,7 @@ package mwanachamaassetmanager
 import "errors"
 
 // ErrLocationNotFound is returned when a Location does not exist for the
-// given agencyID and locationID combination.
+// given locationID.
 var ErrLocationNotFound = errors.New("location not found")
 
 // ErrInvalidLocation is returned when a Location is missing required
@@ -16,7 +16,7 @@ var ErrInvalidLocation = errors.New("invalid location: missing required fields o
 var ErrLocationNotEmpty = errors.New("location has child locations or assets and cannot be deleted")
 
 // ErrAssetNotFound is returned when an Asset does not exist for the given
-// agencyID and assetID combination.
+// assetID.
 var ErrAssetNotFound = errors.New("asset not found")
 
 // ErrInvalidAsset is returned when an Asset is missing required fields,
@@ -26,7 +26,7 @@ var ErrInvalidAsset = errors.New("invalid asset: missing required fields")
 
 // ErrAssetSerialTagExists is returned by [AssetManager.CreateAsset] when a
 // serialized Asset's SerialTag is already in use by another non-deleted
-// Asset in the same agency.
+// Asset.
 var ErrAssetSerialTagExists = errors.New("asset serial tag already in use")
 
 // ErrAssetTrackingModeImmutable is returned by [AssetManager.UpdateAsset]
@@ -39,7 +39,7 @@ var ErrAssetTrackingModeImmutable = errors.New("asset tracking mode cannot be ch
 var ErrAssetHasOpenHolds = errors.New("asset has open holds and cannot be deleted")
 
 // ErrMovementNotFound is returned when a Movement does not exist for the
-// given agencyID and movementID combination.
+// given movementID.
 var ErrMovementNotFound = errors.New("movement not found")
 
 // ErrInvalidMovement is returned when a Movement's Kind/Quantity/location
@@ -53,7 +53,7 @@ var ErrInvalidMovement = errors.New("invalid movement: kind, quantity or locatio
 var ErrMovementAlreadyReversed = errors.New("movement already reversed")
 
 // ErrHoldNotFound is returned when a Hold does not exist for the given
-// agencyID and holdID combination.
+// holdID.
 var ErrHoldNotFound = errors.New("hold not found")
 
 // ErrInvalidHold is returned when a Hold is missing required fields, has a

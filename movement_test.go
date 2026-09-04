@@ -12,11 +12,11 @@ const testActor = "actor-1"
 
 func setupFungibleAsset(t *testing.T, m mwanachamaassetmanager.AssetManager, ctx context.Context) (mwanachamaassetmanager.Asset, mwanachamaassetmanager.Location) {
 	t.Helper()
-	loc, err := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Warehouse"})
+	loc, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := m.CreateAsset(ctx, testAgency, mwanachamaassetmanager.Asset{Name: "Rice, 50kg bag", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	a, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice, 50kg bag", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestPostMovement_ArrivedThenBalance(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
+	mv, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{
 		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: loc.ID, PerformedBy: testActor,
 	})
 	if err != nil {
@@ -38,7 +38,7 @@ func TestPostMovement_ArrivedThenBalance(t *testing.T) {
 		t.Fatal("expected a generated ID")
 	}
 
-	balance, err := m.GetAssetBalance(ctx, testAgency, a.ID, loc.ID)
+	balance, err := m.GetAssetBalance(ctx, a.ID, loc.ID)
 	if err != nil {
 		t.Fatalf("GetAssetBalance: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestPostMovement_ArrivedThenBalance(t *testing.T) {
 		t.Fatalf("expected balance 100, got %d", balance)
 	}
 
-	updated, err := m.GetAsset(ctx, testAgency, a.ID)
+	updated, err := m.GetAsset(ctx, a.ID)
 	if err != nil {
 		t.Fatalf("GetAsset: %v", err)
 	}
@@ -59,21 +59,21 @@ func TestPostMovement_TransferredMovesBalance(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 	a, warehouse := setupFungibleAsset(t, m, ctx)
-	shop, _ := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Shop"})
+	shop, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop"})
 
-	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
+	if _, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{
 		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 50, ToLocationID: warehouse.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
-	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{
+	if _, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{
 		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 20, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement transferred: %v", err)
 	}
 
-	warehouseBalance, _ := m.GetAssetBalance(ctx, testAgency, a.ID, warehouse.ID)
-	shopBalance, _ := m.GetAssetBalance(ctx, testAgency, a.ID, shop.ID)
+	warehouseBalance, _ := m.GetAssetBalance(ctx, a.ID, warehouse.ID)
+	shopBalance, _ := m.GetAssetBalance(ctx, a.ID, shop.ID)
 	if warehouseBalance != 30 {
 		t.Fatalf("expected warehouse balance 30, got %d", warehouseBalance)
 	}
@@ -87,12 +87,12 @@ func TestPostMovement_DepartedReducesBalance(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	_, _ = m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID, PerformedBy: testActor})
-	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindDeparted, Quantity: 10, FromLocationID: loc.ID, PerformedBy: testActor})
+	_, _ = m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID, PerformedBy: testActor})
+	_, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindDeparted, Quantity: 10, FromLocationID: loc.ID, PerformedBy: testActor})
 	if err != nil {
 		t.Fatalf("PostMovement departed: %v", err)
 	}
-	balance, _ := m.GetAssetBalance(ctx, testAgency, a.ID, loc.ID)
+	balance, _ := m.GetAssetBalance(ctx, a.ID, loc.ID)
 	if balance != 20 {
 		t.Fatalf("expected balance 20, got %d", balance)
 	}
@@ -103,12 +103,12 @@ func TestPostMovement_AdjustedCanBeNegative(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	_, _ = m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID, PerformedBy: testActor})
-	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindAdjusted, Quantity: -3, ToLocationID: loc.ID, Note: "stock count variance", PerformedBy: testActor})
+	_, _ = m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 30, ToLocationID: loc.ID, PerformedBy: testActor})
+	_, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindAdjusted, Quantity: -3, ToLocationID: loc.ID, Note: "stock count variance", PerformedBy: testActor})
 	if err != nil {
 		t.Fatalf("PostMovement adjusted: %v", err)
 	}
-	balance, _ := m.GetAssetBalance(ctx, testAgency, a.ID, loc.ID)
+	balance, _ := m.GetAssetBalance(ctx, a.ID, loc.ID)
 	if balance != 27 {
 		t.Fatalf("expected balance 27, got %d", balance)
 	}
@@ -135,7 +135,7 @@ func TestPostMovement_InvalidShapes(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := m.PostMovement(ctx, testAgency, c.mv)
+			_, err := m.PostMovement(ctx, c.mv)
 			if !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
 				t.Fatalf("expected ErrInvalidMovement, got %v", err)
 			}
@@ -146,15 +146,15 @@ func TestPostMovement_InvalidShapes(t *testing.T) {
 func TestPostMovement_SerializedQuantityMustBeOne(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
-	loc, _ := m.CreateLocation(ctx, testAgency, mwanachamaassetmanager.Location{Name: "Pasture"})
-	a, _ := m.CreateAsset(ctx, testAgency, mwanachamaassetmanager.Asset{Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-1"})
+	loc, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Pasture"})
+	a, _ := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-1"})
 
-	_, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 2, ToLocationID: loc.ID, PerformedBy: testActor})
+	_, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 2, ToLocationID: loc.ID, PerformedBy: testActor})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
 		t.Fatalf("expected ErrInvalidMovement for quantity != 1 on a serialized asset, got %v", err)
 	}
 
-	if _, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID, PerformedBy: testActor}); err != nil {
+	if _, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 1, ToLocationID: loc.ID, PerformedBy: testActor}); err != nil {
 		t.Fatalf("expected quantity 1 to succeed, got %v", err)
 	}
 }
@@ -164,12 +164,12 @@ func TestReverseMovement_CancelsBalance(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, err := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 40, ToLocationID: loc.ID, PerformedBy: testActor})
+	mv, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 40, ToLocationID: loc.ID, PerformedBy: testActor})
 	if err != nil {
 		t.Fatalf("PostMovement: %v", err)
 	}
 
-	reversal, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "counted wrong")
+	reversal, err := m.ReverseMovement(ctx, mv.ID, testActor, "counted wrong")
 	if err != nil {
 		t.Fatalf("ReverseMovement: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestReverseMovement_CancelsBalance(t *testing.T) {
 		t.Fatalf("expected ReversesMovementID %q, got %q", mv.ID, reversal.ReversesMovementID)
 	}
 
-	balance, err := m.GetAssetBalance(ctx, testAgency, a.ID, loc.ID)
+	balance, err := m.GetAssetBalance(ctx, a.ID, loc.ID)
 	if err != nil {
 		t.Fatalf("GetAssetBalance: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestReverseMovement_CancelsBalance(t *testing.T) {
 	}
 
 	// Original untouched.
-	original, err := m.GetMovement(ctx, testAgency, mv.ID)
+	original, err := m.GetMovement(ctx, mv.ID)
 	if err != nil {
 		t.Fatalf("GetMovement: %v", err)
 	}
@@ -203,8 +203,8 @@ func TestReverseMovement_RequiresPerformedBy(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
-	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, "", "no actor"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
+	mv, _ := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
+	if _, err := m.ReverseMovement(ctx, mv.ID, "", "no actor"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
 		t.Fatalf("expected ErrInvalidMovement for empty performedBy, got %v", err)
 	}
 }
@@ -214,11 +214,11 @@ func TestReverseMovement_DoubleReverseRejected(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
-	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "first"); err != nil {
+	mv, _ := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
+	if _, err := m.ReverseMovement(ctx, mv.ID, testActor, "first"); err != nil {
 		t.Fatalf("first ReverseMovement: %v", err)
 	}
-	if _, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "second"); !errors.Is(err, mwanachamaassetmanager.ErrMovementAlreadyReversed) {
+	if _, err := m.ReverseMovement(ctx, mv.ID, testActor, "second"); !errors.Is(err, mwanachamaassetmanager.ErrMovementAlreadyReversed) {
 		t.Fatalf("expected ErrMovementAlreadyReversed, got %v", err)
 	}
 }
@@ -228,12 +228,12 @@ func TestReverseMovement_CannotReverseAReversal(t *testing.T) {
 	m := newTestManager(t)
 	a, loc := setupFungibleAsset(t, m, ctx)
 
-	mv, _ := m.PostMovement(ctx, testAgency, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
-	reversal, err := m.ReverseMovement(ctx, testAgency, mv.ID, testActor, "first")
+	mv, _ := m.PostMovement(ctx, mwanachamaassetmanager.Movement{AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor})
+	reversal, err := m.ReverseMovement(ctx, mv.ID, testActor, "first")
 	if err != nil {
 		t.Fatalf("ReverseMovement: %v", err)
 	}
-	if _, err := m.ReverseMovement(ctx, testAgency, reversal.ID, testActor, "again"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
+	if _, err := m.ReverseMovement(ctx, reversal.ID, testActor, "again"); !errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement) {
 		t.Fatalf("expected ErrInvalidMovement reversing a reversal, got %v", err)
 	}
 }

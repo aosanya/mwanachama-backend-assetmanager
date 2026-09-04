@@ -31,14 +31,9 @@ const (
 // Location is a place an [Asset] can be — a warehouse bin, a household
 // room, a pasture. Nested via ParentLocationID; unbounded depth.
 type Location struct {
-	// ID is the unique identifier for this location within the agency.
-	// Set by the backend on creation; callers should leave it empty in
-	// create requests.
+	// ID is the unique identifier for this location. Set by the backend on
+	// creation; callers should leave it empty in create requests.
 	ID string `json:"id"`
-
-	// AgencyID is the agency (tenant — a household, a store, a warehouse
-	// operator) that owns this location.
-	AgencyID string `json:"agency_id"`
 
 	// Name is the short human-readable label (e.g. "Bin 12", "Pantry shelf").
 	Name string `json:"name"`
@@ -62,13 +57,9 @@ type Location struct {
 // Asset is a trackable thing — either one physical unit (serialized) or a
 // type tracked as a quantity (fungible). See [AssetTrackingMode].
 type Asset struct {
-	// ID is the unique identifier for this asset within the agency.
-	// Set by the backend on creation; callers should leave it empty in
-	// create requests.
+	// ID is the unique identifier for this asset. Set by the backend on
+	// creation; callers should leave it empty in create requests.
 	ID string `json:"id"`
-
-	// AgencyID is the agency that owns this asset.
-	AgencyID string `json:"agency_id"`
 
 	// Name is the short human-readable label (e.g. "T-shirt, size M", "Bessie").
 	Name string `json:"name"`
@@ -76,8 +67,8 @@ type Asset struct {
 	// TrackingMode selects how this asset's on-hand amount is interpreted.
 	TrackingMode AssetTrackingMode `json:"tracking_mode"`
 
-	// SerialTag is the unique-per-agency tag/serial for a serialized asset
-	// (an ear tag, an equipment serial number). Empty for fungible assets.
+	// SerialTag is the unique tag/serial for a serialized asset (an ear
+	// tag, an equipment serial number). Empty for fungible assets.
 	SerialTag string `json:"serial_tag,omitempty"`
 
 	// Category is a free-form grouping label (e.g. "livestock", "grocery",
@@ -139,13 +130,9 @@ const (
 // it — never a stored running total. A correction is a new Movement with
 // Kind [MovementKindReversed], not an edit to a prior one.
 type Movement struct {
-	// ID is the unique identifier for this movement within the agency.
-	// Set by the backend on creation; callers should leave it empty in
-	// create requests.
+	// ID is the unique identifier for this movement. Set by the backend on
+	// creation; callers should leave it empty in create requests.
 	ID string `json:"id"`
-
-	// AgencyID is the agency this movement belongs to.
-	AgencyID string `json:"agency_id"`
 
 	// AssetID is the Asset this movement affects.
 	AssetID string `json:"asset_id"`
@@ -239,13 +226,9 @@ func (s HoldStatus) CanTransitionTo(next HoldStatus) bool {
 // never committed; supports partial fulfillment (CommittedQuantity may be
 // less than Quantity, with the remainder released).
 type Hold struct {
-	// ID is the unique identifier for this hold within the agency.
-	// Set by the backend on creation; callers should leave it empty in
-	// create requests.
+	// ID is the unique identifier for this hold. Set by the backend on
+	// creation; callers should leave it empty in create requests.
 	ID string `json:"id"`
-
-	// AgencyID is the agency this hold belongs to.
-	AgencyID string `json:"agency_id"`
 
 	// AssetID is the Asset this hold reserves against.
 	AssetID string `json:"asset_id"`

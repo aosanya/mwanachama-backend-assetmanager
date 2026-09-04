@@ -24,24 +24,23 @@ import (
 // defers. A crash between the two leaves the ledger correct (it's the only
 // source of truth for balance) and the denormalized LocationID stale until
 // the next movement corrects it.
-func (m *assetManager) PostMovement(ctx context.Context, agencyID string, mv Movement) (Movement, error) {
+func (m *assetManager) PostMovement(ctx context.Context, mv Movement) (Movement, error) {
 	shape, err := validateMovementShape(mv)
 	if err != nil {
 		return Movement{}, err
 	}
-	current, err := m.GetAsset(ctx, agencyID, mv.AssetID)
+	current, err := m.GetAsset(ctx, mv.AssetID)
 	if err != nil {
 		return Movement{}, err
 	}
 	if current.TrackingMode == AssetTrackingModeSerialized && shape.absQuantity() != 1 {
 		return Movement{}, fmt.Errorf("%w: a serialized asset's movement quantity must be exactly 1", ErrInvalidMovement)
 	}
-	if err := m.validateMovementLocations(ctx, agencyID, mv); err != nil {
+	if err := m.validateMovementLocations(ctx, mv); err != nil {
 		return Movement{}, err
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	mv.AgencyID = agencyID
 	mv.ReversesMovementID = ""
 	mv.CreatedAt = now
 	if mv.OccurredAt == "" {
@@ -49,7 +48,6 @@ func (m *assetManager) PostMovement(ctx context.Context, agencyID string, mv Mov
 	}
 
 	created, err := m.dm.CreateEntity(ctx, entitygraph.CreateEntityRequest{
-		AgencyID:   agencyID,
 		TypeID:     movementTypeID,
 		Properties: movementToProperties(mv),
 	})
@@ -58,7 +56,7 @@ func (m *assetManager) PostMovement(ctx context.Context, agencyID string, mv Mov
 	}
 	out := movementFromEntity(created)
 
-	if err := m.syncAssetLocation(ctx, agencyID, out); err != nil {
+	if err := m.syncAssetLocation(ctx, out); err != nil {
 		return out, fmt.Errorf("PostMovement: entry posted (id=%s) but denormalized location sync failed: %w", out.ID, err)
 	}
 	return out, nil
@@ -128,13 +126,13 @@ func validateMovementShape(mv Movement) (movementShape, error) {
 }
 
 // validateMovementLocations confirms every non-empty location field
-// references a real Location in the agency.
-func (m *assetManager) validateMovementLocations(ctx context.Context, agencyID string, mv Movement) error {
+// references a real Location.
+func (m *assetManager) validateMovementLocations(ctx context.Context, mv Movement) error {
 	for _, locID := range []string{mv.FromLocationID, mv.ToLocationID} {
 		if locID == "" {
 			continue
 		}
-		if _, err := m.GetLocation(ctx, agencyID, locID); err != nil {
+		if _, err := m.GetLocation(ctx, locID); err != nil {
 			if errors.Is(err, ErrLocationNotFound) {
 				return fmt.Errorf("%w: location %q not found", ErrInvalidMovement, locID)
 			}
@@ -147,8 +145,8 @@ func (m *assetManager) validateMovementLocations(ctx context.Context, agencyID s
 // syncAssetLocation patches Asset.location_id to reflect mv's destination —
 // ToLocationID if the movement arrived somewhere, otherwise cleared (the
 // asset left the system, or a reversal undid its last recorded position).
-func (m *assetManager) syncAssetLocation(ctx context.Context, agencyID string, mv Movement) error {
-	_, err := m.dm.UpdateEntity(ctx, agencyID, mv.AssetID, entitygraph.UpdateEntityRequest{
+func (m *assetManager) syncAssetLocation(ctx context.Context, mv Movement) error {
+	_, err := m.dm.UpdateEntity(ctx, mv.AssetID, entitygraph.UpdateEntityRequest{
 		Properties: map[string]any{
 			"location_id": mv.ToLocationID,
 			"updated_at":  time.Now().UTC().Format(time.RFC3339),
@@ -166,18 +164,18 @@ func (m *assetManager) syncAssetLocation(ctx context.Context, agencyID string, m
 // are the original's swapped, which is what makes GetAssetBalance's fold
 // cancel the pair out to zero net effect regardless of the original Kind's
 // sign convention.
-func (m *assetManager) ReverseMovement(ctx context.Context, agencyID, movementID, performedBy, note string) (Movement, error) {
+func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performedBy, note string) (Movement, error) {
 	if performedBy == "" {
 		return Movement{}, fmt.Errorf("%w: performedBy is required — every ledger entry needs an accountable actor", ErrInvalidMovement)
 	}
-	original, err := m.GetMovement(ctx, agencyID, movementID)
+	original, err := m.GetMovement(ctx, movementID)
 	if err != nil {
 		return Movement{}, err
 	}
 	if original.Kind == MovementKindReversed {
 		return Movement{}, fmt.Errorf("%w: cannot reverse a reversal", ErrInvalidMovement)
 	}
-	existing, err := m.ListMovements(ctx, agencyID, MovementFilter{AssetID: original.AssetID})
+	existing, err := m.ListMovements(ctx, MovementFilter{AssetID: original.AssetID})
 	if err != nil {
 		return Movement{}, fmt.Errorf("ReverseMovement: %w", err)
 	}
@@ -189,7 +187,6 @@ func (m *assetManager) ReverseMovement(ctx context.Context, agencyID, movementID
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	reversal := Movement{
-		AgencyID:           agencyID,
 		AssetID:            original.AssetID,
 		Kind:               MovementKindReversed,
 		Quantity:           original.Quantity,
@@ -203,7 +200,6 @@ func (m *assetManager) ReverseMovement(ctx context.Context, agencyID, movementID
 	}
 
 	created, err := m.dm.CreateEntity(ctx, entitygraph.CreateEntityRequest{
-		AgencyID:   agencyID,
 		TypeID:     movementTypeID,
 		Properties: movementToProperties(reversal),
 	})
@@ -212,31 +208,31 @@ func (m *assetManager) ReverseMovement(ctx context.Context, agencyID, movementID
 	}
 	out := movementFromEntity(created)
 
-	if err := m.syncAssetLocation(ctx, agencyID, out); err != nil {
+	if err := m.syncAssetLocation(ctx, out); err != nil {
 		return out, fmt.Errorf("ReverseMovement: entry posted (id=%s) but denormalized location sync failed: %w", out.ID, err)
 	}
 	return out, nil
 }
 
-// GetMovement reads a single Movement entity from the agency graph.
-func (m *assetManager) GetMovement(ctx context.Context, agencyID, movementID string) (Movement, error) {
-	e, err := m.dm.GetEntity(ctx, agencyID, movementID)
+// GetMovement reads a single Movement entity from the graph.
+func (m *assetManager) GetMovement(ctx context.Context, movementID string) (Movement, error) {
+	e, err := m.dm.GetEntity(ctx, movementID)
 	if err != nil {
 		if errors.Is(err, entitygraph.ErrEntityNotFound) {
 			return Movement{}, ErrMovementNotFound
 		}
 		return Movement{}, fmt.Errorf("GetMovement: %w", err)
 	}
-	if e.AgencyID != agencyID || e.TypeID != movementTypeID {
+	if e.TypeID != movementTypeID {
 		return Movement{}, ErrMovementNotFound
 	}
 	return movementFromEntity(e), nil
 }
 
-// ListMovements returns all Movement entities for the agency that match the
-// filter, in no particular guaranteed order (callers folding a balance
-// don't need one — sum is order-independent).
-func (m *assetManager) ListMovements(ctx context.Context, agencyID string, filter MovementFilter) ([]Movement, error) {
+// ListMovements returns all Movement entities that match the filter, in no
+// particular guaranteed order (callers folding a balance don't need one —
+// sum is order-independent).
+func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter) ([]Movement, error) {
 	props := map[string]any{}
 	if filter.AssetID != "" {
 		props["asset_id"] = filter.AssetID
@@ -246,7 +242,6 @@ func (m *assetManager) ListMovements(ctx context.Context, agencyID string, filte
 	}
 
 	entities, err := m.dm.ListEntities(ctx, entitygraph.EntityFilter{
-		AgencyID:   agencyID,
 		TypeID:     movementTypeID,
 		Properties: props,
 	})
@@ -267,8 +262,8 @@ func (m *assetManager) ListMovements(ctx context.Context, agencyID string, filte
 // only; a reversal is just another Movement in the fold, so it cancels its
 // original by construction — see ReverseMovement's swapped From/To). Never
 // a stored running total — always recomputed from the ledger.
-func (m *assetManager) GetAssetBalance(ctx context.Context, agencyID, assetID, locationID string) (int64, error) {
-	movements, err := m.ListMovements(ctx, agencyID, MovementFilter{AssetID: assetID})
+func (m *assetManager) GetAssetBalance(ctx context.Context, assetID, locationID string) (int64, error) {
+	movements, err := m.ListMovements(ctx, MovementFilter{AssetID: assetID})
 	if err != nil {
 		return 0, fmt.Errorf("GetAssetBalance: %w", err)
 	}

@@ -7,11 +7,12 @@
 // own postgres/backend_test.go split, the same pattern
 // mwanachama-backend-taskmanager's postgres_integration_test.go uses. The
 // unit tests elsewhere in this package already exhaustively cover
-// AssetManager's business logic against fakeDataManager, whose TraverseGraph
-// is single-hop only; this file's job is narrower — prove the real Postgres
-// wiring works end-to-end, and specifically prove multi-level
-// ListDescendantLocations (a real recursive-CTE traversal, not something
-// the fake can honestly test).
+// AssetManager's business logic against fakeDataManager; this file's job is
+// narrower — prove the real Postgres wiring works end-to-end, and
+// specifically prove multi-level ListDescendantLocations against a real
+// database (not something the fake honestly needs to exercise now that the
+// BFS in location.go drives the walk itself via ListRelationships/
+// GetEntity rather than a backend-specific traversal).
 package mwanachamaassetmanager_test
 
 import (
@@ -31,10 +32,10 @@ func applyAssetDDL(ctx context.Context, db *sql.DB, script string) error {
 }
 
 // newPostgresAssetManager opens POSTGRES_URL, creates a scratch set of
-// assetit_-prefixed tables, seeds+activates DefaultAssetSchema for
-// agencyID, and returns a ready-to-use AssetManager. Skips the calling test
-// if POSTGRES_URL is unset. Tables are dropped on cleanup.
-func newPostgresAssetManager(t *testing.T, agencyID string) mwanachamaassetmanager.AssetManager {
+// assetit_-prefixed tables, seeds+activates DefaultAssetSchema, and returns
+// a ready-to-use AssetManager. Skips the calling test if POSTGRES_URL is
+// unset. Tables are dropped on cleanup.
+func newPostgresAssetManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	t.Helper()
 	dsn := os.Getenv("POSTGRES_URL")
 	if dsn == "" {
@@ -59,14 +60,13 @@ func newPostgresAssetManager(t *testing.T, agencyID string) mwanachamaassetmanag
 	backend := postgres.NewBackend(db, tables)
 
 	s := mwanachamaassetmanager.DefaultAssetSchema()
-	s.AgencyID = agencyID
 	if err := backend.SetSchema(ctx, s); err != nil {
 		t.Fatalf("SetSchema: %v", err)
 	}
-	if err := backend.Publish(ctx, agencyID); err != nil {
+	if err := backend.Publish(ctx); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
-	if err := backend.Activate(ctx, agencyID, 1); err != nil {
+	if err := backend.Activate(ctx, 1); err != nil {
 		t.Fatalf("Activate: %v", err)
 	}
 
@@ -78,22 +78,21 @@ func newPostgresAssetManager(t *testing.T, agencyID string) mwanachamaassetmanag
 }
 
 func TestPostgres_LocationAndAssetCRUD_RoundTrip(t *testing.T) {
-	const agencyID = "pg-agency-asset"
-	mgr := newPostgresAssetManager(t, agencyID)
+	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	loc, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
+	loc, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, agencyID, mwanachamaassetmanager.Asset{
+	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{
 		Name: "Rice, 50kg bag", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, LocationID: loc.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
 
-	got, err := mgr.GetAsset(ctx, agencyID, a.ID)
+	got, err := mgr.GetAsset(ctx, a.ID)
 	if err != nil {
 		t.Fatalf("GetAsset: %v", err)
 	}
@@ -103,39 +102,38 @@ func TestPostgres_LocationAndAssetCRUD_RoundTrip(t *testing.T) {
 }
 
 func TestPostgres_MovementLedger_BalanceFold(t *testing.T) {
-	const agencyID = "pg-agency-movement"
-	mgr := newPostgresAssetManager(t, agencyID)
+	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	warehouse, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Warehouse"})
+	warehouse, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	shop, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Shop"})
+	shop, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, agencyID, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
 
-	if _, err := mgr.PostMovement(ctx, agencyID, mwanachamaassetmanager.Movement{
+	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
 		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
-	if _, err := mgr.PostMovement(ctx, agencyID, mwanachamaassetmanager.Movement{
+	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
 		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement transferred: %v", err)
 	}
 
-	warehouseBalance, err := mgr.GetAssetBalance(ctx, agencyID, a.ID, warehouse.ID)
+	warehouseBalance, err := mgr.GetAssetBalance(ctx, a.ID, warehouse.ID)
 	if err != nil {
 		t.Fatalf("GetAssetBalance warehouse: %v", err)
 	}
-	shopBalance, err := mgr.GetAssetBalance(ctx, agencyID, a.ID, shop.ID)
+	shopBalance, err := mgr.GetAssetBalance(ctx, a.ID, shop.ID)
 	if err != nil {
 		t.Fatalf("GetAssetBalance shop: %v", err)
 	}
@@ -146,27 +144,25 @@ func TestPostgres_MovementLedger_BalanceFold(t *testing.T) {
 
 // TestPostgres_ListDescendantLocations_MultiLevel proves the recursive-tree
 // design decision actually holds against real Postgres: three levels deep
-// (warehouse > aisle > bin), which fakeDataManager's single-hop
-// TraverseGraph cannot honestly exercise.
+// (warehouse > aisle > bin).
 func TestPostgres_ListDescendantLocations_MultiLevel(t *testing.T) {
-	const agencyID = "pg-agency-location-tree"
-	mgr := newPostgresAssetManager(t, agencyID)
+	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	warehouse, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
+	warehouse, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation warehouse: %v", err)
 	}
-	aisle, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Aisle 3", Kind: "aisle", ParentLocationID: warehouse.ID})
+	aisle, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Aisle 3", Kind: "aisle", ParentLocationID: warehouse.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation aisle: %v", err)
 	}
-	bin, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: aisle.ID})
+	bin, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: aisle.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation bin: %v", err)
 	}
 
-	descendants, err := mgr.ListDescendantLocations(ctx, agencyID, warehouse.ID)
+	descendants, err := mgr.ListDescendantLocations(ctx, warehouse.ID)
 	if err != nil {
 		t.Fatalf("ListDescendantLocations: %v", err)
 	}
@@ -183,39 +179,38 @@ func TestPostgres_ListDescendantLocations_MultiLevel(t *testing.T) {
 
 	// A grandchild reparent that would create a cycle through two hops is
 	// rejected — proof reparentLocation's descendant check also holds
-	// multi-level against the real recursive CTE.
+	// multi-level.
 	warehouse.ParentLocationID = bin.ID
-	if _, err := mgr.UpdateLocation(ctx, agencyID, warehouse); err == nil {
+	if _, err := mgr.UpdateLocation(ctx, warehouse); err == nil {
 		t.Fatal("expected a multi-hop cycle to be rejected")
 	}
 }
 
 func TestPostgres_HoldLifecycle(t *testing.T) {
-	const agencyID = "pg-agency-hold"
-	mgr := newPostgresAssetManager(t, agencyID)
+	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	loc, err := mgr.CreateLocation(ctx, agencyID, mwanachamaassetmanager.Location{Name: "Shop floor"})
+	loc, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop floor"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, agencyID, mwanachamaassetmanager.Asset{Name: "T-shirt M", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "T-shirt M", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
-	if _, err := mgr.PostMovement(ctx, agencyID, mwanachamaassetmanager.Movement{
+	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
 		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement: %v", err)
 	}
 
-	h, err := mgr.CreateHold(ctx, agencyID, mwanachamaassetmanager.Hold{
+	h, err := mgr.CreateHold(ctx, mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: time.Now().UTC().Add(time.Hour).Format(time.RFC3339), PlacedBy: "pg-actor",
 	})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}
-	committed, _, err := mgr.CommitHold(ctx, agencyID, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "checkout")
+	committed, _, err := mgr.CommitHold(ctx, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "checkout")
 	if err != nil {
 		t.Fatalf("CommitHold: %v", err)
 	}
@@ -223,7 +218,7 @@ func TestPostgres_HoldLifecycle(t *testing.T) {
 		t.Fatalf("expected committed, got %q", committed.Status)
 	}
 
-	balance, err := mgr.GetAssetBalance(ctx, agencyID, a.ID, loc.ID)
+	balance, err := mgr.GetAssetBalance(ctx, a.ID, loc.ID)
 	if err != nil {
 		t.Fatalf("GetAssetBalance: %v", err)
 	}

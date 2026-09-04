@@ -22,7 +22,7 @@ import (
 // h.ExpiresAt, provided that much is actually available: the asset's
 // balance at that location minus what every other still-open
 // ([HoldStatusReserved]) hold there has already reserved.
-func (m *assetManager) CreateHold(ctx context.Context, agencyID string, h Hold) (Hold, error) {
+func (m *assetManager) CreateHold(ctx context.Context, h Hold) (Hold, error) {
 	if h.AssetID == "" {
 		return Hold{}, fmt.Errorf("%w: AssetID is required", ErrInvalidHold)
 	}
@@ -42,14 +42,14 @@ func (m *assetManager) CreateHold(ctx context.Context, agencyID string, h Hold) 
 	if !expiresAt.After(time.Now().UTC()) {
 		return Hold{}, fmt.Errorf("%w: ExpiresAt must be in the future", ErrInvalidHold)
 	}
-	if _, err := m.GetAsset(ctx, agencyID, h.AssetID); err != nil {
+	if _, err := m.GetAsset(ctx, h.AssetID); err != nil {
 		return Hold{}, err
 	}
-	if _, err := m.GetLocation(ctx, agencyID, h.LocationID); err != nil {
+	if _, err := m.GetLocation(ctx, h.LocationID); err != nil {
 		return Hold{}, err
 	}
 
-	available, err := m.availableQuantity(ctx, agencyID, h.AssetID, h.LocationID)
+	available, err := m.availableQuantity(ctx, h.AssetID, h.LocationID)
 	if err != nil {
 		return Hold{}, fmt.Errorf("CreateHold: %w", err)
 	}
@@ -58,14 +58,12 @@ func (m *assetManager) CreateHold(ctx context.Context, agencyID string, h Hold) 
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	h.AgencyID = agencyID
 	h.Status = HoldStatusReserved
 	h.CommittedQuantity = 0
 	h.CreatedAt = now
 	h.UpdatedAt = now
 
 	created, err := m.dm.CreateEntity(ctx, entitygraph.CreateEntityRequest{
-		AgencyID:   agencyID,
 		TypeID:     holdTypeID,
 		Properties: holdToProperties(h),
 	})
@@ -79,12 +77,12 @@ func (m *assetManager) CreateHold(ctx context.Context, agencyID string, h Hold) 
 // remaining Quantity of every other open (status = reserved) Hold there.
 // A partially_committed or released Hold no longer reserves anything —
 // it's terminal, its remainder was already given back.
-func (m *assetManager) availableQuantity(ctx context.Context, agencyID, assetID, locationID string) (int64, error) {
-	balance, err := m.GetAssetBalance(ctx, agencyID, assetID, locationID)
+func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationID string) (int64, error) {
+	balance, err := m.GetAssetBalance(ctx, assetID, locationID)
 	if err != nil {
 		return 0, err
 	}
-	openHolds, err := m.ListHolds(ctx, agencyID, HoldFilter{AssetID: assetID, LocationID: locationID, Status: HoldStatusReserved})
+	openHolds, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, LocationID: locationID, Status: HoldStatusReserved})
 	if err != nil {
 		return 0, err
 	}
@@ -95,16 +93,16 @@ func (m *assetManager) availableQuantity(ctx context.Context, agencyID, assetID,
 	return balance - reserved, nil
 }
 
-// GetHold reads a single Hold entity from the agency graph.
-func (m *assetManager) GetHold(ctx context.Context, agencyID, holdID string) (Hold, error) {
-	e, err := m.dm.GetEntity(ctx, agencyID, holdID)
+// GetHold reads a single Hold entity from the graph.
+func (m *assetManager) GetHold(ctx context.Context, holdID string) (Hold, error) {
+	e, err := m.dm.GetEntity(ctx, holdID)
 	if err != nil {
 		if errors.Is(err, entitygraph.ErrEntityNotFound) {
 			return Hold{}, ErrHoldNotFound
 		}
 		return Hold{}, fmt.Errorf("GetHold: %w", err)
 	}
-	if e.AgencyID != agencyID || e.TypeID != holdTypeID {
+	if e.TypeID != holdTypeID {
 		return Hold{}, ErrHoldNotFound
 	}
 	return holdFromEntity(e), nil
@@ -117,8 +115,8 @@ func (m *assetManager) GetHold(ctx context.Context, agencyID, holdID string) (Ho
 // is transferred. quantity may be less than the hold's full reserved
 // amount; whatever's left is released in this same call — see the package
 // doc for why there is no later, second commit on the same hold.
-func (m *assetManager) CommitHold(ctx context.Context, agencyID, holdID string, quantity int64, kind MovementKind, toLocationID, performedBy string) (Hold, Movement, error) {
-	hold, err := m.GetHold(ctx, agencyID, holdID)
+func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity int64, kind MovementKind, toLocationID, performedBy string) (Hold, Movement, error) {
+	hold, err := m.GetHold(ctx, holdID)
 	if err != nil {
 		return Hold{}, Movement{}, err
 	}
@@ -141,7 +139,7 @@ func (m *assetManager) CommitHold(ctx context.Context, agencyID, holdID string, 
 		ToLocationID:   toLocationID,
 		PerformedBy:    performedBy,
 	}
-	movement, err := m.PostMovement(ctx, agencyID, mv)
+	movement, err := m.PostMovement(ctx, mv)
 	if err != nil {
 		return Hold{}, Movement{}, fmt.Errorf("CommitHold: %w", err)
 	}
@@ -154,7 +152,7 @@ func (m *assetManager) CommitHold(ctx context.Context, agencyID, holdID string, 
 	}
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	updated, err := m.dm.UpdateEntity(ctx, agencyID, hold.ID, entitygraph.UpdateEntityRequest{
+	updated, err := m.dm.UpdateEntity(ctx, hold.ID, entitygraph.UpdateEntityRequest{
 		Properties: map[string]any{
 			"status":             string(hold.Status),
 			"committed_quantity": hold.CommittedQuantity,
@@ -170,8 +168,8 @@ func (m *assetManager) CommitHold(ctx context.Context, agencyID, holdID string, 
 // ReleaseHold releases a reserved Hold with nothing committed — manual
 // release, or the outcome the watchdog applies once ExpiresAt has passed
 // (see hold_watchdog.go).
-func (m *assetManager) ReleaseHold(ctx context.Context, agencyID, holdID string) (Hold, error) {
-	hold, err := m.GetHold(ctx, agencyID, holdID)
+func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (Hold, error) {
+	hold, err := m.GetHold(ctx, holdID)
 	if err != nil {
 		return Hold{}, err
 	}
@@ -181,7 +179,7 @@ func (m *assetManager) ReleaseHold(ctx context.Context, agencyID, holdID string)
 	hold.Status = HoldStatusReleased
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	updated, err := m.dm.UpdateEntity(ctx, agencyID, hold.ID, entitygraph.UpdateEntityRequest{
+	updated, err := m.dm.UpdateEntity(ctx, hold.ID, entitygraph.UpdateEntityRequest{
 		Properties: map[string]any{
 			"status":     string(hold.Status),
 			"updated_at": hold.UpdatedAt,
@@ -196,9 +194,8 @@ func (m *assetManager) ReleaseHold(ctx context.Context, agencyID, holdID string)
 	return holdFromEntity(updated), nil
 }
 
-// ListHolds returns all non-deleted Hold entities for the agency that match
-// the filter.
-func (m *assetManager) ListHolds(ctx context.Context, agencyID string, filter HoldFilter) ([]Hold, error) {
+// ListHolds returns all non-deleted Hold entities that match the filter.
+func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]Hold, error) {
 	props := map[string]any{}
 	if filter.AssetID != "" {
 		props["asset_id"] = filter.AssetID
@@ -211,7 +208,6 @@ func (m *assetManager) ListHolds(ctx context.Context, agencyID string, filter Ho
 	}
 
 	entities, err := m.dm.ListEntities(ctx, entitygraph.EntityFilter{
-		AgencyID:   agencyID,
 		TypeID:     holdTypeID,
 		Properties: props,
 	})

@@ -10,12 +10,12 @@ import (
 	"github.com/aosanya/mwanachama-backend-shared/entitygraph"
 )
 
-// CreateAsset creates a new Asset entity in the agency graph. It does not
+// CreateAsset creates a new Asset entity in the graph. It does not
 // establish any balance — an Asset row with no Movement against it holds
 // nothing anywhere; balance always comes from folding the Movement ledger
 // (see movement.go's GetAssetBalance). LocationID, if set, is an informational
 // starting point only.
-func (m *assetManager) CreateAsset(ctx context.Context, agencyID string, a Asset) (Asset, error) {
+func (m *assetManager) CreateAsset(ctx context.Context, a Asset) (Asset, error) {
 	if a.Name == "" {
 		return Asset{}, fmt.Errorf("%w: Asset.Name is required", ErrInvalidAsset)
 	}
@@ -25,7 +25,6 @@ func (m *assetManager) CreateAsset(ctx context.Context, agencyID string, a Asset
 			return Asset{}, fmt.Errorf("%w: SerialTag is required for a serialized asset", ErrInvalidAsset)
 		}
 		existing, err := m.dm.ListEntities(ctx, entitygraph.EntityFilter{
-			AgencyID:   agencyID,
 			TypeID:     assetTypeID,
 			Properties: map[string]any{"serial_tag": a.SerialTag},
 		})
@@ -42,7 +41,7 @@ func (m *assetManager) CreateAsset(ctx context.Context, agencyID string, a Asset
 			ErrInvalidAsset, AssetTrackingModeSerialized, AssetTrackingModeFungible, a.TrackingMode)
 	}
 	if a.LocationID != "" {
-		if _, err := m.GetLocation(ctx, agencyID, a.LocationID); err != nil {
+		if _, err := m.GetLocation(ctx, a.LocationID); err != nil {
 			if errors.Is(err, ErrLocationNotFound) {
 				return Asset{}, fmt.Errorf("%w: location %q not found", ErrInvalidAsset, a.LocationID)
 			}
@@ -51,12 +50,10 @@ func (m *assetManager) CreateAsset(ctx context.Context, agencyID string, a Asset
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	a.AgencyID = agencyID
 	a.CreatedAt = now
 	a.UpdatedAt = now
 
 	created, err := m.dm.CreateEntity(ctx, entitygraph.CreateEntityRequest{
-		AgencyID:   agencyID,
 		TypeID:     assetTypeID,
 		Properties: assetToProperties(a),
 	})
@@ -66,16 +63,16 @@ func (m *assetManager) CreateAsset(ctx context.Context, agencyID string, a Asset
 	return assetFromEntity(created), nil
 }
 
-// GetAsset reads a single Asset entity from the agency graph.
-func (m *assetManager) GetAsset(ctx context.Context, agencyID, assetID string) (Asset, error) {
-	e, err := m.dm.GetEntity(ctx, agencyID, assetID)
+// GetAsset reads a single Asset entity from the graph.
+func (m *assetManager) GetAsset(ctx context.Context, assetID string) (Asset, error) {
+	e, err := m.dm.GetEntity(ctx, assetID)
 	if err != nil {
 		if errors.Is(err, entitygraph.ErrEntityNotFound) {
 			return Asset{}, ErrAssetNotFound
 		}
 		return Asset{}, fmt.Errorf("GetAsset: %w", err)
 	}
-	if e.AgencyID != agencyID || e.TypeID != assetTypeID {
+	if e.TypeID != assetTypeID {
 		return Asset{}, ErrAssetNotFound
 	}
 	return assetFromEntity(e), nil
@@ -86,8 +83,8 @@ func (m *assetManager) GetAsset(ctx context.Context, agencyID, assetID string) (
 // creation would silently invalidate every prior Movement's balance
 // semantics ([ErrAssetTrackingModeImmutable]), and LocationID is a
 // derived field only PostMovement/ReverseMovement may update.
-func (m *assetManager) UpdateAsset(ctx context.Context, agencyID string, a Asset) (Asset, error) {
-	current, err := m.GetAsset(ctx, agencyID, a.ID)
+func (m *assetManager) UpdateAsset(ctx context.Context, a Asset) (Asset, error) {
+	current, err := m.GetAsset(ctx, a.ID)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -98,13 +95,12 @@ func (m *assetManager) UpdateAsset(ctx context.Context, agencyID string, a Asset
 		return Asset{}, ErrAssetTrackingModeImmutable
 	}
 
-	a.AgencyID = agencyID
 	a.TrackingMode = current.TrackingMode
 	a.LocationID = current.LocationID
 	a.CreatedAt = current.CreatedAt
 	a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	updated, err := m.dm.UpdateEntity(ctx, agencyID, a.ID, entitygraph.UpdateEntityRequest{
+	updated, err := m.dm.UpdateEntity(ctx, a.ID, entitygraph.UpdateEntityRequest{
 		Properties: assetToProperties(a),
 	})
 	if err != nil {
@@ -119,18 +115,18 @@ func (m *assetManager) UpdateAsset(ctx context.Context, agencyID string, a Asset
 // DeleteAsset soft-deletes the Asset entity. Refused with
 // [ErrAssetHasOpenHolds] if the asset has any Hold still in
 // [HoldStatusReserved] — release or commit those first.
-func (m *assetManager) DeleteAsset(ctx context.Context, agencyID, assetID string) error {
-	if _, err := m.GetAsset(ctx, agencyID, assetID); err != nil {
+func (m *assetManager) DeleteAsset(ctx context.Context, assetID string) error {
+	if _, err := m.GetAsset(ctx, assetID); err != nil {
 		return err
 	}
-	openHolds, err := m.ListHolds(ctx, agencyID, HoldFilter{AssetID: assetID, Status: HoldStatusReserved})
+	openHolds, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, Status: HoldStatusReserved})
 	if err != nil {
 		return fmt.Errorf("DeleteAsset: %w", err)
 	}
 	if len(openHolds) > 0 {
 		return ErrAssetHasOpenHolds
 	}
-	if err := m.dm.DeleteEntity(ctx, agencyID, assetID); err != nil {
+	if err := m.dm.DeleteEntity(ctx, assetID); err != nil {
 		if errors.Is(err, entitygraph.ErrEntityNotFound) {
 			return ErrAssetNotFound
 		}
@@ -139,9 +135,8 @@ func (m *assetManager) DeleteAsset(ctx context.Context, agencyID, assetID string
 	return nil
 }
 
-// ListAssets returns all non-deleted Asset entities for the agency that
-// match the filter.
-func (m *assetManager) ListAssets(ctx context.Context, agencyID string, filter AssetFilter) ([]Asset, error) {
+// ListAssets returns all non-deleted Asset entities that match the filter.
+func (m *assetManager) ListAssets(ctx context.Context, filter AssetFilter) ([]Asset, error) {
 	props := map[string]any{}
 	if filter.Category != "" {
 		props["category"] = filter.Category
@@ -154,7 +149,6 @@ func (m *assetManager) ListAssets(ctx context.Context, agencyID string, filter A
 	}
 
 	entities, err := m.dm.ListEntities(ctx, entitygraph.EntityFilter{
-		AgencyID:   agencyID,
 		TypeID:     assetTypeID,
 		Properties: props,
 	})

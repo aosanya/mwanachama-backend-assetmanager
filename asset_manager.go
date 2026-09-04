@@ -89,54 +89,62 @@ type HoldFilter struct {
 }
 
 // AssetManager is the primary interface for asset/inventory lifecycle
-// management. Every method takes agencyID explicitly — this backend is
-// multi-tenant, and entitygraph.DataManager already scopes every entity by
-// agency, so "owner" (a household, a store, a warehouse operator) maps
-// directly onto that existing concept.
+// management.
 type AssetManager interface {
 	// Location
 
-	CreateLocation(ctx context.Context, agencyID string, l Location) (Location, error)
-	GetLocation(ctx context.Context, agencyID, locationID string) (Location, error)
-	UpdateLocation(ctx context.Context, agencyID string, l Location) (Location, error)
-	DeleteLocation(ctx context.Context, agencyID, locationID string) error
-	ListLocations(ctx context.Context, agencyID string, filter LocationFilter) ([]Location, error)
-	ListDescendantLocations(ctx context.Context, agencyID, locationID string) ([]Location, error)
+	CreateLocation(ctx context.Context, l Location) (Location, error)
+	GetLocation(ctx context.Context, locationID string) (Location, error)
+	UpdateLocation(ctx context.Context, l Location) (Location, error)
+	DeleteLocation(ctx context.Context, locationID string) error
+	ListLocations(ctx context.Context, filter LocationFilter) ([]Location, error)
+	ListDescendantLocations(ctx context.Context, locationID string) ([]Location, error)
 
 	// Asset
 
-	CreateAsset(ctx context.Context, agencyID string, a Asset) (Asset, error)
-	GetAsset(ctx context.Context, agencyID, assetID string) (Asset, error)
-	UpdateAsset(ctx context.Context, agencyID string, a Asset) (Asset, error)
-	DeleteAsset(ctx context.Context, agencyID, assetID string) error
-	ListAssets(ctx context.Context, agencyID string, filter AssetFilter) ([]Asset, error)
+	CreateAsset(ctx context.Context, a Asset) (Asset, error)
+	GetAsset(ctx context.Context, assetID string) (Asset, error)
+	UpdateAsset(ctx context.Context, a Asset) (Asset, error)
+	DeleteAsset(ctx context.Context, assetID string) error
+	ListAssets(ctx context.Context, filter AssetFilter) ([]Asset, error)
 
 	// Movement
 
-	PostMovement(ctx context.Context, agencyID string, mv Movement) (Movement, error)
-	ReverseMovement(ctx context.Context, agencyID, movementID, performedBy, note string) (Movement, error)
-	GetMovement(ctx context.Context, agencyID, movementID string) (Movement, error)
-	ListMovements(ctx context.Context, agencyID string, filter MovementFilter) ([]Movement, error)
-	GetAssetBalance(ctx context.Context, agencyID, assetID, locationID string) (int64, error)
+	PostMovement(ctx context.Context, mv Movement) (Movement, error)
+	ReverseMovement(ctx context.Context, movementID, performedBy, note string) (Movement, error)
+	GetMovement(ctx context.Context, movementID string) (Movement, error)
+	ListMovements(ctx context.Context, filter MovementFilter) ([]Movement, error)
+	GetAssetBalance(ctx context.Context, assetID, locationID string) (int64, error)
 
 	// Hold
 
-	CreateHold(ctx context.Context, agencyID string, h Hold) (Hold, error)
-	GetHold(ctx context.Context, agencyID, holdID string) (Hold, error)
-	CommitHold(ctx context.Context, agencyID, holdID string, quantity int64, kind MovementKind, toLocationID, performedBy string) (Hold, Movement, error)
-	ReleaseHold(ctx context.Context, agencyID, holdID string) (Hold, error)
-	ListHolds(ctx context.Context, agencyID string, filter HoldFilter) ([]Hold, error)
-	ListHoldsExpiredAsOf(ctx context.Context, agencyID string, cutoffRFC3339 string) ([]Hold, error)
+	CreateHold(ctx context.Context, h Hold) (Hold, error)
+	GetHold(ctx context.Context, holdID string) (Hold, error)
+	CommitHold(ctx context.Context, holdID string, quantity int64, kind MovementKind, toLocationID, performedBy string) (Hold, Movement, error)
+	ReleaseHold(ctx context.Context, holdID string) (Hold, error)
+	ListHolds(ctx context.Context, filter HoldFilter) ([]Hold, error)
+	ListHoldsExpiredAsOf(ctx context.Context, cutoffRFC3339 string) ([]Hold, error)
+}
+
+// dataManager is entitygraph.DataManager plus the relationship methods this
+// package needs — CreateRelationship/DeleteRelationship/ListRelationships
+// are no longer part of the shared interface (see its doc comment), since
+// each consumer knows its own fixed set of relationship labels.
+type dataManager interface {
+	entitygraph.DataManager
+	CreateRelationship(ctx context.Context, req entitygraph.CreateRelationshipRequest) (entitygraph.Relationship, error)
+	DeleteRelationship(ctx context.Context, relationshipID string) error
+	ListRelationships(ctx context.Context, filter entitygraph.RelationshipFilter) ([]entitygraph.Relationship, error)
 }
 
 // assetManager is the entitygraph-backed implementation of [AssetManager].
 type assetManager struct {
-	dm entitygraph.DataManager
+	dm dataManager
 }
 
 // NewAssetManager constructs an [AssetManager] backed by the given
 // [entitygraph.DataManager]. Returns an error if dm is nil.
-func NewAssetManager(dm entitygraph.DataManager) (AssetManager, error) {
+func NewAssetManager(dm dataManager) (AssetManager, error) {
 	if dm == nil {
 		return nil, fmt.Errorf("NewAssetManager: data manager must not be nil")
 	}

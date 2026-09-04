@@ -22,7 +22,6 @@ func locationToProperties(l Location) map[string]any {
 func locationFromEntity(e entitygraph.Entity) Location {
 	return Location{
 		ID:               e.ID,
-		AgencyID:         e.AgencyID,
 		Name:             entitygraph.StringProp(e.Properties, "name"),
 		Kind:             entitygraph.StringProp(e.Properties, "kind"),
 		ParentLocationID: entitygraph.StringProp(e.Properties, "parent_location_id"),
@@ -49,7 +48,6 @@ func assetToProperties(a Asset) map[string]any {
 func assetFromEntity(e entitygraph.Entity) Asset {
 	return Asset{
 		ID:             e.ID,
-		AgencyID:       e.AgencyID,
 		Name:           entitygraph.StringProp(e.Properties, "name"),
 		TrackingMode:   AssetTrackingMode(entitygraph.StringProp(e.Properties, "tracking_mode")),
 		SerialTag:      entitygraph.StringProp(e.Properties, "serial_tag"),
@@ -81,7 +79,6 @@ func movementToProperties(mv Movement) map[string]any {
 func movementFromEntity(e entitygraph.Entity) Movement {
 	return Movement{
 		ID:                 e.ID,
-		AgencyID:           e.AgencyID,
 		AssetID:            entitygraph.StringProp(e.Properties, "asset_id"),
 		Kind:               MovementKind(entitygraph.StringProp(e.Properties, "kind")),
 		Quantity:           entitygraph.Int64Prop(e.Properties, "quantity"),
@@ -114,7 +111,6 @@ func holdToProperties(h Hold) map[string]any {
 func holdFromEntity(e entitygraph.Entity) Hold {
 	return Hold{
 		ID:                e.ID,
-		AgencyID:          e.AgencyID,
 		AssetID:           entitygraph.StringProp(e.Properties, "asset_id"),
 		LocationID:        entitygraph.StringProp(e.Properties, "location_id"),
 		Status:            HoldStatus(entitygraph.StringProp(e.Properties, "status")),

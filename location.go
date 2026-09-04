@@ -11,32 +11,32 @@ import (
 )
 
 // descendantTraversalDepth bounds how far [assetManager.ListDescendantLocations]
-// walks the child_of tree. entitygraph.TraverseGraph compiles a single call
-// to one recursive CTE (see mwanachama-backend-taskmanager's W5 port notes),
-// so this is a safety cap, not a real limit on tree depth in practice — no
-// realistic warehouse/household/chapter hierarchy nests this deep.
+// walks the child_of tree. entitygraph.DataManager has no TraverseGraph
+// helper, so ListDescendantLocations walks the tree itself, one level of
+// child_of edges per round trip (see the function below) — this is a real
+// bound on the number of round trips, not just a nominal safety cap, but
+// still comfortably supports depth 200 for any realistic warehouse/
+// household/chapter hierarchy.
 const descendantTraversalDepth = 200
 
-// CreateLocation creates a new Location entity in the agency graph. When
-// l.ParentLocationID is set, the parent must already exist in the same
-// agency; the child_of edge is created atomically with the entity via
-// entitygraph's inline-relationship support.
-func (m *assetManager) CreateLocation(ctx context.Context, agencyID string, l Location) (Location, error) {
+// CreateLocation creates a new Location entity in the graph. When
+// l.ParentLocationID is set, the parent must already exist; the child_of
+// edge is created atomically with the entity via entitygraph's
+// inline-relationship support.
+func (m *assetManager) CreateLocation(ctx context.Context, l Location) (Location, error) {
 	if l.Name == "" {
 		return Location{}, fmt.Errorf("%w: Location.Name is required", ErrInvalidLocation)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	l.AgencyID = agencyID
 	l.CreatedAt = now
 	l.UpdatedAt = now
 
 	req := entitygraph.CreateEntityRequest{
-		AgencyID:   agencyID,
 		TypeID:     locationTypeID,
 		Properties: locationToProperties(l),
 	}
 	if l.ParentLocationID != "" {
-		parent, err := m.GetLocation(ctx, agencyID, l.ParentLocationID)
+		parent, err := m.GetLocation(ctx, l.ParentLocationID)
 		if err != nil {
 			if errors.Is(err, ErrLocationNotFound) {
 				return Location{}, fmt.Errorf("%w: parent location %q not found", ErrInvalidLocation, l.ParentLocationID)
@@ -55,16 +55,16 @@ func (m *assetManager) CreateLocation(ctx context.Context, agencyID string, l Lo
 	return locationFromEntity(created), nil
 }
 
-// GetLocation reads a single Location entity from the agency graph.
-func (m *assetManager) GetLocation(ctx context.Context, agencyID, locationID string) (Location, error) {
-	e, err := m.dm.GetEntity(ctx, agencyID, locationID)
+// GetLocation reads a single Location entity from the graph.
+func (m *assetManager) GetLocation(ctx context.Context, locationID string) (Location, error) {
+	e, err := m.dm.GetEntity(ctx, locationID)
 	if err != nil {
 		if errors.Is(err, entitygraph.ErrEntityNotFound) {
 			return Location{}, ErrLocationNotFound
 		}
 		return Location{}, fmt.Errorf("GetLocation: %w", err)
 	}
-	if e.AgencyID != agencyID || e.TypeID != locationTypeID {
+	if e.TypeID != locationTypeID {
 		return Location{}, ErrLocationNotFound
 	}
 	return locationFromEntity(e), nil
@@ -74,8 +74,8 @@ func (m *assetManager) GetLocation(ctx context.Context, agencyID, locationID str
 // ParentLocationID differs from the stored value. Re-parenting is rejected
 // if the new parent is the location itself or one of its own descendants —
 // that would introduce a cycle in the child_of tree.
-func (m *assetManager) UpdateLocation(ctx context.Context, agencyID string, l Location) (Location, error) {
-	current, err := m.GetLocation(ctx, agencyID, l.ID)
+func (m *assetManager) UpdateLocation(ctx context.Context, l Location) (Location, error) {
+	current, err := m.GetLocation(ctx, l.ID)
 	if err != nil {
 		return Location{}, err
 	}
@@ -84,16 +84,15 @@ func (m *assetManager) UpdateLocation(ctx context.Context, agencyID string, l Lo
 	}
 
 	if l.ParentLocationID != current.ParentLocationID {
-		if err := m.reparentLocation(ctx, agencyID, current, l.ParentLocationID); err != nil {
+		if err := m.reparentLocation(ctx, current, l.ParentLocationID); err != nil {
 			return Location{}, err
 		}
 	}
 
-	l.AgencyID = agencyID
 	l.CreatedAt = current.CreatedAt
 	l.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	updated, err := m.dm.UpdateEntity(ctx, agencyID, l.ID, entitygraph.UpdateEntityRequest{
+	updated, err := m.dm.UpdateEntity(ctx, l.ID, entitygraph.UpdateEntityRequest{
 		Properties: locationToProperties(l),
 	})
 	if err != nil {
@@ -109,18 +108,18 @@ func (m *assetManager) UpdateLocation(ctx context.Context, agencyID string, l Lo
 // self-parenting and cycles, then replaces the child_of edge (deleting the
 // old one, if any, and creating the new one, if any — an empty
 // newParentID means "become a root location").
-func (m *assetManager) reparentLocation(ctx context.Context, agencyID string, current Location, newParentID string) error {
+func (m *assetManager) reparentLocation(ctx context.Context, current Location, newParentID string) error {
 	if newParentID == current.ID {
 		return fmt.Errorf("%w: a location cannot be its own parent", ErrInvalidLocation)
 	}
 	if newParentID != "" {
-		if _, err := m.GetLocation(ctx, agencyID, newParentID); err != nil {
+		if _, err := m.GetLocation(ctx, newParentID); err != nil {
 			if errors.Is(err, ErrLocationNotFound) {
 				return fmt.Errorf("%w: parent location %q not found", ErrInvalidLocation, newParentID)
 			}
 			return fmt.Errorf("reparentLocation: %w", err)
 		}
-		descendants, err := m.ListDescendantLocations(ctx, agencyID, current.ID)
+		descendants, err := m.ListDescendantLocations(ctx, current.ID)
 		if err != nil {
 			return fmt.Errorf("reparentLocation: %w", err)
 		}
@@ -132,16 +131,15 @@ func (m *assetManager) reparentLocation(ctx context.Context, agencyID string, cu
 	}
 
 	if current.ParentLocationID != "" {
-		if err := m.deleteChildOfEdge(ctx, agencyID, current.ID); err != nil {
+		if err := m.deleteChildOfEdge(ctx, current.ID); err != nil {
 			return fmt.Errorf("reparentLocation: %w", err)
 		}
 	}
 	if newParentID != "" {
 		if _, err := m.dm.CreateRelationship(ctx, entitygraph.CreateRelationshipRequest{
-			AgencyID: agencyID,
-			Name:     RelLabelChildOf,
-			FromID:   current.ID,
-			ToID:     newParentID,
+			Name:   RelLabelChildOf,
+			FromID: current.ID,
+			ToID:   newParentID,
 		}); err != nil {
 			return fmt.Errorf("reparentLocation: create child_of: %w", err)
 		}
@@ -151,17 +149,16 @@ func (m *assetManager) reparentLocation(ctx context.Context, agencyID string, cu
 
 // deleteChildOfEdge removes locationID's outbound child_of edge, if any.
 // A location with no parent has none — a no-op, not an error.
-func (m *assetManager) deleteChildOfEdge(ctx context.Context, agencyID, locationID string) error {
+func (m *assetManager) deleteChildOfEdge(ctx context.Context, locationID string) error {
 	edges, err := m.dm.ListRelationships(ctx, entitygraph.RelationshipFilter{
-		AgencyID: agencyID,
-		FromID:   locationID,
-		Name:     RelLabelChildOf,
+		FromID: locationID,
+		Name:   RelLabelChildOf,
 	})
 	if err != nil {
 		return fmt.Errorf("deleteChildOfEdge: list: %w", err)
 	}
 	for _, e := range edges {
-		if err := m.dm.DeleteRelationship(ctx, agencyID, e.ID); err != nil && !errors.Is(err, entitygraph.ErrRelationshipNotFound) {
+		if err := m.dm.DeleteRelationship(ctx, e.ID); err != nil && !errors.Is(err, entitygraph.ErrRelationshipNotFound) {
 			return fmt.Errorf("deleteChildOfEdge: %w", err)
 		}
 	}
@@ -171,18 +168,18 @@ func (m *assetManager) deleteChildOfEdge(ctx context.Context, agencyID, location
 // DeleteLocation soft-deletes the Location entity. Refused with
 // [ErrLocationNotEmpty] if the location currently has child locations or
 // assets denormalized to it — move or delete those first.
-func (m *assetManager) DeleteLocation(ctx context.Context, agencyID, locationID string) error {
-	if _, err := m.GetLocation(ctx, agencyID, locationID); err != nil {
+func (m *assetManager) DeleteLocation(ctx context.Context, locationID string) error {
+	if _, err := m.GetLocation(ctx, locationID); err != nil {
 		return err
 	}
-	children, err := m.ListLocations(ctx, agencyID, LocationFilter{ParentLocationID: locationID})
+	children, err := m.ListLocations(ctx, LocationFilter{ParentLocationID: locationID})
 	if err != nil {
 		return fmt.Errorf("DeleteLocation: %w", err)
 	}
 	if len(children) > 0 {
 		return ErrLocationNotEmpty
 	}
-	assetsHere, err := m.ListAssets(ctx, agencyID, AssetFilter{LocationID: locationID})
+	assetsHere, err := m.ListAssets(ctx, AssetFilter{LocationID: locationID})
 	if err != nil {
 		return fmt.Errorf("DeleteLocation: %w", err)
 	}
@@ -190,10 +187,10 @@ func (m *assetManager) DeleteLocation(ctx context.Context, agencyID, locationID 
 		return ErrLocationNotEmpty
 	}
 
-	if err := m.deleteChildOfEdge(ctx, agencyID, locationID); err != nil {
+	if err := m.deleteChildOfEdge(ctx, locationID); err != nil {
 		return fmt.Errorf("DeleteLocation: %w", err)
 	}
-	if err := m.dm.DeleteEntity(ctx, agencyID, locationID); err != nil {
+	if err := m.dm.DeleteEntity(ctx, locationID); err != nil {
 		if errors.Is(err, entitygraph.ErrEntityNotFound) {
 			return ErrLocationNotFound
 		}
@@ -202,9 +199,9 @@ func (m *assetManager) DeleteLocation(ctx context.Context, agencyID, locationID 
 	return nil
 }
 
-// ListLocations returns all non-deleted Location entities for the agency
-// that match the filter.
-func (m *assetManager) ListLocations(ctx context.Context, agencyID string, filter LocationFilter) ([]Location, error) {
+// ListLocations returns all non-deleted Location entities that match the
+// filter.
+func (m *assetManager) ListLocations(ctx context.Context, filter LocationFilter) ([]Location, error) {
 	props := map[string]any{}
 	if filter.RootOnly {
 		props["parent_location_id"] = ""
@@ -213,7 +210,6 @@ func (m *assetManager) ListLocations(ctx context.Context, agencyID string, filte
 	}
 
 	entities, err := m.dm.ListEntities(ctx, entitygraph.EntityFilter{
-		AgencyID:   agencyID,
 		TypeID:     locationTypeID,
 		Properties: props,
 	})
@@ -231,23 +227,52 @@ func (m *assetManager) ListLocations(ctx context.Context, agencyID string, filte
 // locationID (children, grandchildren, ...), found by walking inbound
 // child_of edges — a child's child_of edge points at its parent, so
 // "everyone who points at me, transitively" is exactly the descendant set.
-func (m *assetManager) ListDescendantLocations(ctx context.Context, agencyID, locationID string) ([]Location, error) {
-	res, err := m.dm.TraverseGraph(ctx, entitygraph.TraverseGraphRequest{
-		AgencyID:  agencyID,
-		StartID:   locationID,
-		Direction: "inbound",
-		Depth:     descendantTraversalDepth,
-		Names:     []string{RelLabelChildOf},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("ListDescendantLocations: %w", err)
-	}
-	out := make([]Location, 0, len(res.Vertices))
-	for _, e := range res.Vertices {
-		if e.ID == locationID {
-			continue
+//
+// entitygraph.DataManager has no built-in graph traversal, so this walks
+// the tree itself: a bounded breadth-first search that, at each level,
+// lists every child_of edge whose ToID is in the current frontier, then
+// fetches the entity for each edge's FromID (the child) to seed the next
+// level. Depth is capped by descendantTraversalDepth.
+func (m *assetManager) ListDescendantLocations(ctx context.Context, locationID string) ([]Location, error) {
+	visited := map[string]bool{locationID: true}
+	frontier := []string{locationID}
+	var out []Location
+
+	for depth := 0; depth < descendantTraversalDepth && len(frontier) > 0; depth++ {
+		var next []string
+		for _, id := range frontier {
+			edges, err := m.dm.ListRelationships(ctx, entitygraph.RelationshipFilter{
+				ToID: id,
+				Name: RelLabelChildOf,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("ListDescendantLocations: list relationships: %w", err)
+			}
+			for _, e := range edges {
+				if visited[e.FromID] {
+					continue
+				}
+				visited[e.FromID] = true
+				next = append(next, e.FromID)
+			}
 		}
-		out = append(out, locationFromEntity(e))
+		for _, id := range next {
+			e, err := m.dm.GetEntity(ctx, id)
+			if err != nil {
+				if errors.Is(err, entitygraph.ErrEntityNotFound) {
+					// Soft-deleted (or otherwise gone) between the edge
+					// lookup and this read — same "excluded" outcome the
+					// old vertex list gave a deleted entity.
+					continue
+				}
+				return nil, fmt.Errorf("ListDescendantLocations: get entity: %w", err)
+			}
+			out = append(out, locationFromEntity(e))
+		}
+		frontier = next
+	}
+	if out == nil {
+		out = []Location{}
 	}
 	return out, nil
 }

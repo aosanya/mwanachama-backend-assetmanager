@@ -118,6 +118,16 @@ v1 MVP scope question in requirements.md.
 - Which of the above ships in v1 vs. is stubbed — this document describes
   the target shape, not the first cut.
 
+## Merchandise absorption
+
+**2026-09-06 (DEV-1677):** the concrete field-by-field mapping from
+`merchandise-item`/`merchandise-variant`/the stock ledger/`consignment`/
+`handout`/`supplier_delivery` onto Asset/Location/Movement/Hold, the
+held-stock-invariant check, and the full gap list are in
+[merchandise-mapping.md](merchandise-mapping.md) — design only, no code in
+this repo changed. `mwanachama-backend-api-gateway`'s
+`todo_assetmanager_absorb.md` tracks the port itself (DEV-1678 onward).
+
 ## Precedent this design leans on
 
 - `mwanachama-backend-taskmanager/schema.go`, `models.go`,

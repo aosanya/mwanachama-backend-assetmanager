@@ -9,6 +9,66 @@ import (
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
+// Asset, Location, Movement, Hold and their status/kind enum types are
+// aliases of their models. counterparts, so a caller needs only this
+// package's import, never models's directly — mirrors
+// mwanachama-backend-shared/orgsettings's identical convenience aliases.
+type (
+	Asset             = models.Asset
+	AssetTrackingMode = models.AssetTrackingMode
+	Location          = models.Location
+	Movement          = models.Movement
+	MovementKind      = models.MovementKind
+	Hold              = models.Hold
+	HoldStatus        = models.HoldStatus
+)
+
+const (
+	// AssetTrackingModeSerialized means one Asset row is one physical unit.
+	// See [models.AssetTrackingModeSerialized].
+	AssetTrackingModeSerialized = models.AssetTrackingModeSerialized
+
+	// AssetTrackingModeFungible means one Asset row is a type tracked as a
+	// quantity. See [models.AssetTrackingModeFungible].
+	AssetTrackingModeFungible = models.AssetTrackingModeFungible
+
+	// MovementKindArrived is stock/a unit entering the system from outside.
+	// See [models.MovementKindArrived].
+	MovementKindArrived = models.MovementKindArrived
+
+	// MovementKindTransferred is a move from one Location to another. See
+	// [models.MovementKindTransferred].
+	MovementKindTransferred = models.MovementKindTransferred
+
+	// MovementKindDeparted is stock/a unit leaving the system. See
+	// [models.MovementKindDeparted].
+	MovementKindDeparted = models.MovementKindDeparted
+
+	// MovementKindAdjusted is a counted correction with no corresponding
+	// physical move. See [models.MovementKindAdjusted].
+	MovementKindAdjusted = models.MovementKindAdjusted
+
+	// MovementKindReversed is the mirror of a prior entry. See
+	// [models.MovementKindReversed].
+	MovementKindReversed = models.MovementKindReversed
+
+	// HoldStatusReserved is the initial state of every new hold. See
+	// [models.HoldStatusReserved].
+	HoldStatusReserved = models.HoldStatusReserved
+
+	// HoldStatusCommitted is a terminal state — the full held quantity was
+	// committed. See [models.HoldStatusCommitted].
+	HoldStatusCommitted = models.HoldStatusCommitted
+
+	// HoldStatusReleased is a terminal state — the hold was released with
+	// nothing committed. See [models.HoldStatusReleased].
+	HoldStatusReleased = models.HoldStatusReleased
+
+	// HoldStatusPartiallyCommitted is a terminal state — less than the full
+	// held quantity was committed. See [models.HoldStatusPartiallyCommitted].
+	HoldStatusPartiallyCommitted = models.HoldStatusPartiallyCommitted
+)
+
 // LocationFilter scopes a [AssetManager.ListLocations] query. Zero-value
 // fields are ignored (no filtering applied for that field).
 type LocationFilter struct {

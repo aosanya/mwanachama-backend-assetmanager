@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 // locationStatusFor maps this package's Location error sentinels to a
@@ -38,7 +37,7 @@ func writeLocationErr(w http.ResponseWriter, err error) {
 // CreateLocation handles POST — decode, create, encode.
 func CreateLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in models.Location
+		var in mwanachamaassetmanager.Location
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -83,7 +82,7 @@ func UpdateLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		in := models.Location{
+		in := mwanachamaassetmanager.Location{
 			ID:               r.PathValue("locationID"),
 			Name:             body.Name,
 			Kind:             body.Kind,

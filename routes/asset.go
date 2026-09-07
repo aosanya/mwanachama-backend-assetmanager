@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 // assetStatusFor maps this package's Asset error sentinels to a status
@@ -41,7 +40,7 @@ func writeAssetErr(w http.ResponseWriter, err error) {
 // CreateAsset handles POST — decode, create, encode.
 func CreateAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in models.Asset
+		var in mwanachamaassetmanager.Asset
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -88,7 +87,7 @@ func UpdateAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		in := models.Asset{
+		in := mwanachamaassetmanager.Asset{
 			ID:             r.PathValue("assetID"),
 			Name:           body.Name,
 			Category:       body.Category,
@@ -122,7 +121,7 @@ func ListAssets(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 		q := r.URL.Query()
 		filter := mwanachamaassetmanager.AssetFilter{
 			Category:     q.Get("category"),
-			TrackingMode: models.AssetTrackingMode(q.Get("tracking_mode")),
+			TrackingMode: mwanachamaassetmanager.AssetTrackingMode(q.Get("tracking_mode")),
 			LocationID:   q.Get("location_id"),
 		}
 		out, err := am.ListAssets(r.Context(), filter)

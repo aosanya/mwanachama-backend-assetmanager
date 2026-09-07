@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
@@ -51,7 +50,7 @@ func TestCreateLocation(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Location
+	var out mwanachamaassetmanager.Location
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -73,9 +72,9 @@ func TestCreateLocation_MissingName(t *testing.T) {
 	}
 }
 
-func newLocation(t *testing.T, am mwanachamaassetmanager.AssetManager, name, parentID string) models.Location {
+func newLocation(t *testing.T, am mwanachamaassetmanager.AssetManager, name, parentID string) mwanachamaassetmanager.Location {
 	t.Helper()
-	l, err := am.CreateLocation(context.Background(), models.Location{Name: name, ParentLocationID: parentID})
+	l, err := am.CreateLocation(context.Background(), mwanachamaassetmanager.Location{Name: name, ParentLocationID: parentID})
 	if err != nil {
 		t.Fatalf("seed CreateLocation: %v", err)
 	}
@@ -122,7 +121,7 @@ func TestUpdateLocation(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Location
+	var out mwanachamaassetmanager.Location
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if out.Name != "Main Warehouse" {
 		t.Fatalf("unexpected location: %+v", out)
@@ -171,7 +170,7 @@ func TestListLocations_RootOnly(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out []models.Location
+	var out []mwanachamaassetmanager.Location
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out) != 1 || out[0].ID != root.ID {
 		t.Fatalf("expected [root], got %+v", out)
@@ -191,7 +190,7 @@ func TestListDescendantLocations(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out []models.Location
+	var out []mwanachamaassetmanager.Location
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out) != 1 || out[0].ID != child.ID {
 		t.Fatalf("expected [child], got %+v", out)

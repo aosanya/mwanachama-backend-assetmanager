@@ -20,7 +20,6 @@ import (
 	"gorm.io/gorm"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 	"github.com/aosanya/mwanachama-backend-shared/postgres"
 )
 
@@ -70,12 +69,12 @@ func TestPostgres_LocationAndAssetCRUD_RoundTrip(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	loc, err := mgr.CreateLocation(ctx, models.Location{Name: "Warehouse", Kind: "warehouse"})
+	loc, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, models.Asset{
-		Name: "Rice, 50kg bag", TrackingMode: models.AssetTrackingModeFungible, LocationID: loc.ID,
+	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "Rice, 50kg bag", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, LocationID: loc.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
@@ -94,26 +93,26 @@ func TestPostgres_MovementLedger_BalanceFold(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	warehouse, err := mgr.CreateLocation(ctx, models.Location{Name: "Warehouse"})
+	warehouse, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	shop, err := mgr.CreateLocation(ctx, models.Location{Name: "Shop"})
+	shop, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, models.Asset{Name: "Rice", TrackingMode: models.AssetTrackingModeFungible})
+	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
 
-	if _, err := mgr.PostMovement(ctx, models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID, PerformedBy: "pg-actor",
+	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: warehouse.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
-	if _, err := mgr.PostMovement(ctx, models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: "pg-actor",
+	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindTransferred, Quantity: 30, FromLocationID: warehouse.ID, ToLocationID: shop.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement transferred: %v", err)
 	}
@@ -138,15 +137,15 @@ func TestPostgres_ListDescendantLocations_MultiLevel(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	warehouse, err := mgr.CreateLocation(ctx, models.Location{Name: "Warehouse", Kind: "warehouse"})
+	warehouse, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse", Kind: "warehouse"})
 	if err != nil {
 		t.Fatalf("CreateLocation warehouse: %v", err)
 	}
-	aisle, err := mgr.CreateLocation(ctx, models.Location{Name: "Aisle 3", Kind: "aisle", ParentLocationID: warehouse.ID})
+	aisle, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Aisle 3", Kind: "aisle", ParentLocationID: warehouse.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation aisle: %v", err)
 	}
-	bin, err := mgr.CreateLocation(ctx, models.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: aisle.ID})
+	bin, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Bin 12", Kind: "bin", ParentLocationID: aisle.ID})
 	if err != nil {
 		t.Fatalf("CreateLocation bin: %v", err)
 	}
@@ -179,31 +178,31 @@ func TestPostgres_HoldLifecycle(t *testing.T) {
 	mgr := newPostgresAssetManager(t)
 	ctx := context.Background()
 
-	loc, err := mgr.CreateLocation(ctx, models.Location{Name: "Shop floor"})
+	loc, err := mgr.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shop floor"})
 	if err != nil {
 		t.Fatalf("CreateLocation: %v", err)
 	}
-	a, err := mgr.CreateAsset(ctx, models.Asset{Name: "T-shirt M", TrackingMode: models.AssetTrackingModeFungible})
+	a, err := mgr.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "T-shirt M", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
 	}
-	if _, err := mgr.PostMovement(ctx, models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: "pg-actor",
+	if _, err := mgr.PostMovement(ctx, mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: "pg-actor",
 	}); err != nil {
 		t.Fatalf("PostMovement: %v", err)
 	}
 
-	h, err := mgr.CreateHold(ctx, models.Hold{
+	h, err := mgr.CreateHold(ctx, mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: time.Now().UTC().Add(time.Hour).Format(time.RFC3339), PlacedBy: "pg-actor",
 	})
 	if err != nil {
 		t.Fatalf("CreateHold: %v", err)
 	}
-	committed, _, err := mgr.CommitHold(ctx, h.ID, 10, models.MovementKindDeparted, "", "checkout")
+	committed, _, err := mgr.CommitHold(ctx, h.ID, 10, mwanachamaassetmanager.MovementKindDeparted, "", "checkout")
 	if err != nil {
 		t.Fatalf("CommitHold: %v", err)
 	}
-	if committed.Status != models.HoldStatusCommitted {
+	if committed.Status != mwanachamaassetmanager.HoldStatusCommitted {
 		t.Fatalf("expected committed, got %q", committed.Status)
 	}
 

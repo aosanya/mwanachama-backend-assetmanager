@@ -9,13 +9,12 @@ import (
 	"testing"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
-func newAsset(t *testing.T, am mwanachamaassetmanager.AssetManager, name string, mode models.AssetTrackingMode) models.Asset {
+func newAsset(t *testing.T, am mwanachamaassetmanager.AssetManager, name string, mode mwanachamaassetmanager.AssetTrackingMode) mwanachamaassetmanager.Asset {
 	t.Helper()
-	a, err := am.CreateAsset(context.Background(), models.Asset{Name: name, TrackingMode: mode})
+	a, err := am.CreateAsset(context.Background(), mwanachamaassetmanager.Asset{Name: name, TrackingMode: mode})
 	if err != nil {
 		t.Fatalf("seed CreateAsset: %v", err)
 	}
@@ -34,7 +33,7 @@ func TestCreateAsset(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Asset
+	var out mwanachamaassetmanager.Asset
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -71,7 +70,7 @@ func TestGetAsset_NotFound(t *testing.T) {
 
 func TestUpdateAsset(t *testing.T) {
 	am := newTestManager(t)
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
 	handler := routes.UpdateAsset(am)
 
 	body := `{"name":"Rice, 25kg bag","category":"grocery"}`
@@ -82,7 +81,7 @@ func TestUpdateAsset(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Asset
+	var out mwanachamaassetmanager.Asset
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if out.Name != "Rice, 25kg bag" || out.Category != "grocery" {
 		t.Fatalf("unexpected asset: %+v", out)
@@ -91,7 +90,7 @@ func TestUpdateAsset(t *testing.T) {
 
 func TestDeleteAsset(t *testing.T) {
 	am := newTestManager(t)
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
 	handler := routes.DeleteAsset(am)
 
 	req := withPathValue(httptest.NewRequest(http.MethodDelete, "/assets/"+a.ID, nil), "assetID", a.ID)
@@ -105,10 +104,10 @@ func TestDeleteAsset(t *testing.T) {
 
 func TestListAssets_FilterByCategory(t *testing.T) {
 	am := newTestManager(t)
-	if _, err := am.CreateAsset(context.Background(), models.Asset{Name: "Rice", TrackingMode: models.AssetTrackingModeFungible, Category: "grocery"}); err != nil {
+	if _, err := am.CreateAsset(context.Background(), mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, Category: "grocery"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if _, err := am.CreateAsset(context.Background(), models.Asset{Name: "Bessie", TrackingMode: models.AssetTrackingModeSerialized, SerialTag: "COW-1", Category: "livestock"}); err != nil {
+	if _, err := am.CreateAsset(context.Background(), mwanachamaassetmanager.Asset{Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-1", Category: "livestock"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	handler := routes.ListAssets(am)
@@ -120,7 +119,7 @@ func TestListAssets_FilterByCategory(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out []models.Asset
+	var out []mwanachamaassetmanager.Asset
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out) != 1 || out[0].Name != "Rice" {
 		t.Fatalf("expected [Rice], got %+v", out)
@@ -130,9 +129,9 @@ func TestListAssets_FilterByCategory(t *testing.T) {
 func TestGetAssetBalance(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 100, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 100, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
@@ -154,7 +153,7 @@ func TestGetAssetBalance(t *testing.T) {
 
 func TestGetAssetBalance_MissingLocationID(t *testing.T) {
 	am := newTestManager(t)
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
 	handler := routes.GetAssetBalance(am)
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/assets/"+a.ID+"/balance", nil), "assetID", a.ID)

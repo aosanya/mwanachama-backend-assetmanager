@@ -7,15 +7,14 @@ import (
 	"time"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 func TestCreateAsset_Fungible(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	a, err := m.CreateAsset(ctx, models.Asset{
-		Name: "T-shirt, size M", TrackingMode: models.AssetTrackingModeFungible, Category: "merchandise",
+	a, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "T-shirt, size M", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, Category: "merchandise",
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
@@ -29,8 +28,8 @@ func TestCreateAsset_Serialized(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	a, err := m.CreateAsset(ctx, models.Asset{
-		Name: "Bessie", TrackingMode: models.AssetTrackingModeSerialized, SerialTag: "COW-001",
+	a, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-001",
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset: %v", err)
@@ -44,7 +43,7 @@ func TestCreateAsset_MissingName(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, err := m.CreateAsset(ctx, models.Asset{TrackingMode: models.AssetTrackingModeFungible})
+	_, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidAsset) {
 		t.Fatalf("expected ErrInvalidAsset, got %v", err)
 	}
@@ -54,7 +53,7 @@ func TestCreateAsset_InvalidTrackingMode(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, err := m.CreateAsset(ctx, models.Asset{Name: "Mystery", TrackingMode: "bogus"})
+	_, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Mystery", TrackingMode: "bogus"})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidAsset) {
 		t.Fatalf("expected ErrInvalidAsset, got %v", err)
 	}
@@ -64,7 +63,7 @@ func TestCreateAsset_SerializedMissingSerialTag(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, err := m.CreateAsset(ctx, models.Asset{Name: "Laptop", TrackingMode: models.AssetTrackingModeSerialized})
+	_, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Laptop", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized})
 	if !errors.Is(err, mwanachamaassetmanager.ErrInvalidAsset) {
 		t.Fatalf("expected ErrInvalidAsset, got %v", err)
 	}
@@ -74,14 +73,14 @@ func TestCreateAsset_DuplicateSerialTag(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, err := m.CreateAsset(ctx, models.Asset{
-		Name: "Laptop 1", TrackingMode: models.AssetTrackingModeSerialized, SerialTag: "SN-1",
+	_, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "Laptop 1", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "SN-1",
 	})
 	if err != nil {
 		t.Fatalf("CreateAsset first: %v", err)
 	}
-	_, err = m.CreateAsset(ctx, models.Asset{
-		Name: "Laptop 2", TrackingMode: models.AssetTrackingModeSerialized, SerialTag: "SN-1",
+	_, err = m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "Laptop 2", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "SN-1",
 	})
 	if !errors.Is(err, mwanachamaassetmanager.ErrAssetSerialTagExists) {
 		t.Fatalf("expected ErrAssetSerialTagExists, got %v", err)
@@ -92,8 +91,8 @@ func TestUpdateAsset_TrackingModeImmutable(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	a, _ := m.CreateAsset(ctx, models.Asset{Name: "Rice", TrackingMode: models.AssetTrackingModeFungible})
-	a.TrackingMode = models.AssetTrackingModeSerialized
+	a, _ := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	a.TrackingMode = mwanachamaassetmanager.AssetTrackingModeSerialized
 	_, err := m.UpdateAsset(ctx, a)
 	if !errors.Is(err, mwanachamaassetmanager.ErrAssetTrackingModeImmutable) {
 		t.Fatalf("expected ErrAssetTrackingModeImmutable, got %v", err)
@@ -104,14 +103,14 @@ func TestDeleteAsset_OpenHoldsBlocks(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	loc, _ := m.CreateLocation(ctx, models.Location{Name: "Shelf"})
-	a, _ := m.CreateAsset(ctx, models.Asset{Name: "Rice", TrackingMode: models.AssetTrackingModeFungible})
-	if _, err := m.PostMovement(ctx, models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 10, ToLocationID: loc.ID, PerformedBy: testActor,
+	loc, _ := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Shelf"})
+	a, _ := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
+	if _, err := m.PostMovement(ctx, mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 10, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("PostMovement arrived: %v", err)
 	}
-	if _, err := m.CreateHold(ctx, models.Hold{
+	if _, err := m.CreateHold(ctx, mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: futureRFC3339(t), PlacedBy: testActor,
 	}); err != nil {
 		t.Fatalf("CreateHold: %v", err)
@@ -126,8 +125,8 @@ func TestListAssets_FilterByCategory(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)
 
-	_, _ = m.CreateAsset(ctx, models.Asset{Name: "Rice", TrackingMode: models.AssetTrackingModeFungible, Category: "grocery"})
-	_, _ = m.CreateAsset(ctx, models.Asset{Name: "Bessie", TrackingMode: models.AssetTrackingModeSerialized, SerialTag: "COW-1", Category: "livestock"})
+	_, _ = m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible, Category: "grocery"})
+	_, _ = m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-1", Category: "livestock"})
 
 	groceries, err := m.ListAssets(ctx, mwanachamaassetmanager.AssetFilter{Category: "grocery"})
 	if err != nil {

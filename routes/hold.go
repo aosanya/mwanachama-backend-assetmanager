@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 // holdStatusFor maps this package's Hold error sentinels to a status code.
@@ -47,7 +46,7 @@ func writeHoldErr(w http.ResponseWriter, err error) {
 // CreateHold handles POST — decode, create, encode.
 func CreateHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in models.Hold
+		var in mwanachamaassetmanager.Hold
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -75,18 +74,18 @@ func GetHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 
 // commitHoldBody is the wire shape for CommitHold.
 type commitHoldBody struct {
-	Quantity     int64               `json:"quantity"`
-	Kind         models.MovementKind `json:"kind"`
-	ToLocationID string              `json:"to_location_id"`
-	PerformedBy  string              `json:"performed_by"`
+	Quantity     int64                               `json:"quantity"`
+	Kind         mwanachamaassetmanager.MovementKind `json:"kind"`
+	ToLocationID string                              `json:"to_location_id"`
+	PerformedBy  string                              `json:"performed_by"`
 }
 
 // commitHoldResponse is CommitHold's two return values, encoded together —
 // a caller needs both the hold's post-commit state and the movement it
 // posted.
 type commitHoldResponse struct {
-	Hold     models.Hold     `json:"hold"`
-	Movement models.Movement `json:"movement"`
+	Hold     mwanachamaassetmanager.Hold     `json:"hold"`
+	Movement mwanachamaassetmanager.Movement `json:"movement"`
 }
 
 // CommitHold handles POST {holdID}/commit — decode, commit, encode both
@@ -127,7 +126,7 @@ func ListHolds(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 		filter := mwanachamaassetmanager.HoldFilter{
 			AssetID:    q.Get("asset_id"),
 			LocationID: q.Get("location_id"),
-			Status:     models.HoldStatus(q.Get("status")),
+			Status:     mwanachamaassetmanager.HoldStatus(q.Get("status")),
 		}
 		out, err := am.ListHolds(r.Context(), filter)
 		if err != nil {

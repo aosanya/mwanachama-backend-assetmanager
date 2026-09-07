@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
+	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func TestPostMovement(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
 	handler := routes.PostMovement(am)
 
 	body := `{"asset_id":"` + a.ID + `","kind":"arrived","quantity":100,"to_location_id":"` + loc.ID + `","performed_by":"` + testActor + `"}`
@@ -26,7 +26,7 @@ func TestPostMovement(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Movement
+	var out mwanachamaassetmanager.Movement
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestPostMovement(t *testing.T) {
 
 func TestPostMovement_InvalidShape(t *testing.T) {
 	am := newTestManager(t)
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
 	handler := routes.PostMovement(am)
 
 	body := `{"asset_id":"` + a.ID + `","kind":"arrived","quantity":0,"performed_by":"` + testActor + `"}`
@@ -81,9 +81,9 @@ func TestGetMovement_NotFound(t *testing.T) {
 func TestListMovements_FilterByAssetID(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 10, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 10, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestListMovements_FilterByAssetID(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out []models.Movement
+	var out []mwanachamaassetmanager.Movement
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out) != 1 {
 		t.Fatalf("expected 1 movement, got %+v", out)
@@ -106,9 +106,9 @@ func TestListMovements_FilterByAssetID(t *testing.T) {
 func TestReverseMovement(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	mv, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 40, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	mv, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 40, ToLocationID: loc.ID, PerformedBy: testActor,
 	})
 	if err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
@@ -123,9 +123,9 @@ func TestReverseMovement(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Movement
+	var out mwanachamaassetmanager.Movement
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
-	if out.Kind != models.MovementKindReversed || out.ReversesMovementID != mv.ID {
+	if out.Kind != mwanachamaassetmanager.MovementKindReversed || out.ReversesMovementID != mv.ID {
 		t.Fatalf("unexpected reversal: %+v", out)
 	}
 }
@@ -133,9 +133,9 @@ func TestReverseMovement(t *testing.T) {
 func TestReverseMovement_MissingPerformedBy(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	mv, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	mv, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor,
 	})
 	if err != nil {
 		t.Fatalf("seed PostMovement: %v", err)

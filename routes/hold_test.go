@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
+	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
@@ -21,9 +21,9 @@ func futureRFC3339(t *testing.T) string {
 func TestCreateHold(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
@@ -37,11 +37,11 @@ func TestCreateHold(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Hold
+	var out mwanachamaassetmanager.Hold
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if out.ID == "" || out.Status != models.HoldStatusReserved {
+	if out.ID == "" || out.Status != mwanachamaassetmanager.HoldStatusReserved {
 		t.Fatalf("unexpected hold: %+v", out)
 	}
 }
@@ -49,9 +49,9 @@ func TestCreateHold(t *testing.T) {
 func TestCreateHold_InsufficientAvailable(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 5, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
@@ -83,13 +83,13 @@ func TestGetHold_NotFound(t *testing.T) {
 func TestCommitHold(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	h, err := am.CreateHold(context.Background(), models.Hold{
+	h, err := am.CreateHold(context.Background(), mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 10, ExpiresAt: futureRFC3339(t), PlacedBy: testActor,
 	})
 	if err != nil {
@@ -106,13 +106,13 @@ func TestCommitHold(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var out struct {
-		Hold     models.Hold     `json:"hold"`
-		Movement models.Movement `json:"movement"`
+		Hold     mwanachamaassetmanager.Hold     `json:"hold"`
+		Movement mwanachamaassetmanager.Movement `json:"movement"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if out.Hold.Status != models.HoldStatusCommitted || out.Movement.Kind != models.MovementKindDeparted {
+	if out.Hold.Status != mwanachamaassetmanager.HoldStatusCommitted || out.Movement.Kind != mwanachamaassetmanager.MovementKindDeparted {
 		t.Fatalf("unexpected commit response: %+v", out)
 	}
 }
@@ -120,13 +120,13 @@ func TestCommitHold(t *testing.T) {
 func TestReleaseHold(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	h, err := am.CreateHold(context.Background(), models.Hold{
+	h, err := am.CreateHold(context.Background(), mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 20, ExpiresAt: futureRFC3339(t), PlacedBy: testActor,
 	})
 	if err != nil {
@@ -141,9 +141,9 @@ func TestReleaseHold(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out models.Hold
+	var out mwanachamaassetmanager.Hold
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
-	if out.Status != models.HoldStatusReleased {
+	if out.Status != mwanachamaassetmanager.HoldStatusReleased {
 		t.Fatalf("unexpected hold: %+v", out)
 	}
 }
@@ -151,13 +151,13 @@ func TestReleaseHold(t *testing.T) {
 func TestListHolds_FilterByStatus(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	if _, err := am.CreateHold(context.Background(), models.Hold{
+	if _, err := am.CreateHold(context.Background(), mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: futureRFC3339(t), PlacedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed CreateHold: %v", err)
@@ -171,7 +171,7 @@ func TestListHolds_FilterByStatus(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out []models.Hold
+	var out []mwanachamaassetmanager.Hold
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out) != 1 {
 		t.Fatalf("expected 1 hold, got %+v", out)
@@ -181,14 +181,14 @@ func TestListHolds_FilterByStatus(t *testing.T) {
 func TestListHoldsExpiredAsOf(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	a := newAsset(t, am, "Rice", models.AssetTrackingModeFungible)
-	if _, err := am.PostMovement(context.Background(), models.Movement{
-		AssetID: a.ID, Kind: models.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
+	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
+	if _, err := am.PostMovement(context.Background(), mwanachamaassetmanager.Movement{
+		AssetID: a.ID, Kind: mwanachamaassetmanager.MovementKindArrived, Quantity: 20, ToLocationID: loc.ID, PerformedBy: testActor,
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
 	nearFuture := time.Now().UTC().Add(time.Minute).Format(time.RFC3339)
-	h, err := am.CreateHold(context.Background(), models.Hold{
+	h, err := am.CreateHold(context.Background(), mwanachamaassetmanager.Hold{
 		AssetID: a.ID, LocationID: loc.ID, Quantity: 5, ExpiresAt: nearFuture, PlacedBy: testActor,
 	})
 	if err != nil {
@@ -204,7 +204,7 @@ func TestListHoldsExpiredAsOf(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var out []models.Hold
+	var out []mwanachamaassetmanager.Hold
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if len(out) != 1 || out[0].ID != h.ID {
 		t.Fatalf("expected [hold], got %+v", out)

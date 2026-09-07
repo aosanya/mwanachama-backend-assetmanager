@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 // movementStatusFor maps this package's Movement error sentinels to a
@@ -43,7 +42,7 @@ func writeMovementErr(w http.ResponseWriter, err error) {
 // PostMovement handles POST — decode, post, encode.
 func PostMovement(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in models.Movement
+		var in mwanachamaassetmanager.Movement
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -76,7 +75,7 @@ func ListMovements(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 		q := r.URL.Query()
 		filter := mwanachamaassetmanager.MovementFilter{
 			AssetID: q.Get("asset_id"),
-			Kind:    models.MovementKind(q.Get("kind")),
+			Kind:    mwanachamaassetmanager.MovementKind(q.Get("kind")),
 		}
 		out, err := am.ListMovements(r.Context(), filter)
 		if err != nil {

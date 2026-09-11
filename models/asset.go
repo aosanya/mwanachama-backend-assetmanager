@@ -22,6 +22,11 @@ type Asset struct {
 	// creation; callers should leave it empty in create requests.
 	ID string `json:"id"`
 
+	// Code is a stable, human-readable identifier (e.g. "A-1") assigned
+	// once at creation. Set by the backend; callers should leave it empty
+	// in create requests. Unlike Name, it never changes on update.
+	Code string `json:"code"`
+
 	// Name is the short human-readable label (e.g. "T-shirt, size M", "Bessie").
 	Name string `json:"name"`
 

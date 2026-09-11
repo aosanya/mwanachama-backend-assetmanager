@@ -24,6 +24,27 @@ func TestCreateLocation_Root(t *testing.T) {
 	}
 }
 
+func TestCreateLocation_CodeAssignedSequentially(t *testing.T) {
+	ctx := context.Background()
+	m := newTestManager(t)
+
+	loc1, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Warehouse"})
+	if err != nil {
+		t.Fatalf("CreateLocation 1: %v", err)
+	}
+	if loc1.Code != "L-1" {
+		t.Fatalf("expected code %q, got %q", "L-1", loc1.Code)
+	}
+
+	loc2, err := m.CreateLocation(ctx, mwanachamaassetmanager.Location{Name: "Pantry"})
+	if err != nil {
+		t.Fatalf("CreateLocation 2: %v", err)
+	}
+	if loc2.Code != "L-2" {
+		t.Fatalf("expected code %q, got %q", "L-2", loc2.Code)
+	}
+}
+
 func TestCreateLocation_MissingName(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)

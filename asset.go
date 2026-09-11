@@ -60,8 +60,17 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 	a.CreatedAt = now
 	a.UpdatedAt = now
 
-	row := gormstore.AssetToRow(a)
-	if err := m.db.WithContext(ctx).Table(m.tables.Assets).Create(&row).Error; err != nil {
+	var row gormstore.AssetRow
+	err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		code, err := gormstore.NextCode(ctx, tx, m.tables.CodeSequences, "asset", "A")
+		if err != nil {
+			return err
+		}
+		a.Code = code
+		row = gormstore.AssetToRow(a)
+		return tx.Table(m.tables.Assets).Create(&row).Error
+	})
+	if err != nil {
 		return models.Asset{}, fmt.Errorf("CreateAsset: %w", err)
 	}
 	return gormstore.AssetFromRow(row), nil

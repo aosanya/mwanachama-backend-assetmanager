@@ -49,6 +49,31 @@ func TestCreateAsset_MissingName(t *testing.T) {
 	}
 }
 
+func TestCreateAsset_CodeAssignedSequentially(t *testing.T) {
+	ctx := context.Background()
+	m := newTestManager(t)
+
+	a1, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible,
+	})
+	if err != nil {
+		t.Fatalf("CreateAsset 1: %v", err)
+	}
+	if a1.Code != "A-1" {
+		t.Fatalf("expected code %q, got %q", "A-1", a1.Code)
+	}
+
+	a2, err := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{
+		Name: "Beans", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible,
+	})
+	if err != nil {
+		t.Fatalf("CreateAsset 2: %v", err)
+	}
+	if a2.Code != "A-2" {
+		t.Fatalf("expected code %q, got %q", "A-2", a2.Code)
+	}
+}
+
 func TestCreateAsset_InvalidTrackingMode(t *testing.T) {
 	ctx := context.Background()
 	m := newTestManager(t)

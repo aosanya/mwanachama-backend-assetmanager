@@ -15,6 +15,7 @@ import (
 // — a real relational table needs only the one column.
 type LocationRow struct {
 	ID               string `gorm:"primaryKey"`
+	Code             string `gorm:"uniqueIndex"`
 	Name             string
 	Kind             string
 	ParentLocationID *string `gorm:"index"`
@@ -34,6 +35,7 @@ func (r *LocationRow) BeforeCreate(_ *gorm.DB) error {
 func LocationToRow(l models.Location) LocationRow {
 	return LocationRow{
 		ID:               l.ID,
+		Code:             l.Code,
 		Name:             l.Name,
 		Kind:             l.Kind,
 		ParentLocationID: StringToNullable(l.ParentLocationID),
@@ -47,6 +49,7 @@ func LocationToRow(l models.Location) LocationRow {
 func LocationFromRow(r LocationRow) models.Location {
 	return models.Location{
 		ID:               r.ID,
+		Code:             r.Code,
 		Name:             r.Name,
 		Kind:             r.Kind,
 		ParentLocationID: nullableToString(r.ParentLocationID),

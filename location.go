@@ -34,8 +34,17 @@ func (m *assetManager) CreateLocation(ctx context.Context, l models.Location) (m
 	l.CreatedAt = now
 	l.UpdatedAt = now
 
-	row := gormstore.LocationToRow(l)
-	if err := m.db.WithContext(ctx).Table(m.tables.Locations).Create(&row).Error; err != nil {
+	var row gormstore.LocationRow
+	err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		code, err := gormstore.NextCode(ctx, tx, m.tables.CodeSequences, "location", "L")
+		if err != nil {
+			return err
+		}
+		l.Code = code
+		row = gormstore.LocationToRow(l)
+		return tx.Table(m.tables.Locations).Create(&row).Error
+	})
+	if err != nil {
 		return models.Location{}, fmt.Errorf("CreateLocation: %w", err)
 	}
 	return gormstore.LocationFromRow(row), nil

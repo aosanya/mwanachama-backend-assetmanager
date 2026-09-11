@@ -12,6 +12,7 @@ import (
 // had as a pre-check query (see asset.go's CreateAsset).
 type AssetRow struct {
 	ID             string `gorm:"primaryKey"`
+	Code           string `gorm:"uniqueIndex"`
 	Name           string
 	TrackingMode   string
 	SerialTag      string
@@ -34,6 +35,7 @@ func (r *AssetRow) BeforeCreate(_ *gorm.DB) error {
 func AssetToRow(a models.Asset) AssetRow {
 	return AssetRow{
 		ID:             a.ID,
+		Code:           a.Code,
 		Name:           a.Name,
 		TrackingMode:   string(a.TrackingMode),
 		SerialTag:      a.SerialTag,
@@ -50,6 +52,7 @@ func AssetToRow(a models.Asset) AssetRow {
 func AssetFromRow(r AssetRow) models.Asset {
 	return models.Asset{
 		ID:             r.ID,
+		Code:           r.Code,
 		Name:           r.Name,
 		TrackingMode:   models.AssetTrackingMode(r.TrackingMode),
 		SerialTag:      r.SerialTag,

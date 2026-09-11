@@ -9,21 +9,24 @@ import (
 // TableNames configures which physical tables an AssetManager reads and
 // writes.
 type TableNames struct {
-	Locations string
-	Assets    string
-	Movements string
-	Holds     string
+	Locations     string
+	Assets        string
+	Movements     string
+	Holds         string
+	CodeSequences string
 }
 
 // DefaultTableNames builds the conventional table set for one mounted
 // instance of this package, e.g. DefaultTableNames("assetit") yields
-// assetit_locations, assetit_assets, assetit_movements, assetit_holds.
+// assetit_locations, assetit_assets, assetit_movements, assetit_holds,
+// assetit_code_sequences.
 func DefaultTableNames(instance string) TableNames {
 	return TableNames{
-		Locations: instance + "_locations",
-		Assets:    instance + "_assets",
-		Movements: instance + "_movements",
-		Holds:     instance + "_holds",
+		Locations:     instance + "_locations",
+		Assets:        instance + "_assets",
+		Movements:     instance + "_movements",
+		Holds:         instance + "_holds",
+		CodeSequences: instance + "_code_sequences",
 	}
 }
 
@@ -45,6 +48,15 @@ func Migrate(db *gorm.DB, t TableNames) error {
 		return err
 	}
 	if err := db.Table(t.Holds).AutoMigrate(&HoldRow{}); err != nil {
+		return err
+	}
+	if err := db.Table(t.CodeSequences).AutoMigrate(&CodeSequenceRow{}); err != nil {
+		return err
+	}
+	if err := BackfillCodes(db, t.Locations, t.CodeSequences, "location", "L"); err != nil {
+		return err
+	}
+	if err := BackfillCodes(db, t.Assets, t.CodeSequences, "asset", "A"); err != nil {
 		return err
 	}
 	return nil

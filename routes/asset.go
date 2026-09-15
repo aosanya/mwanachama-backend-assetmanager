@@ -4,45 +4,39 @@
 package routes
 
 import (
-	"errors"
 	"net/http"
+
+	"github.com/aosanya/mwanachama-backend-shared/httpwire"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
 
-// assetStatusFor maps this package's Asset error sentinels to a status
+// assetStatusTable maps this package's Asset error sentinels to a status
 // code.
-func assetStatusFor(err error) int {
-	switch {
-	case errors.Is(err, mwanachamaassetmanager.ErrAssetNotFound),
-		errors.Is(err, mwanachamaassetmanager.ErrLocationNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, mwanachamaassetmanager.ErrAssetTrackingModeImmutable),
-		errors.Is(err, mwanachamaassetmanager.ErrAssetHasOpenHolds):
-		return http.StatusConflict
-	case errors.Is(err, mwanachamaassetmanager.ErrInvalidAsset),
-		errors.Is(err, mwanachamaassetmanager.ErrAssetSerialTagExists):
-		return http.StatusBadRequest
-	default:
-		return http.StatusInternalServerError
-	}
+var assetStatusTable = map[error]int{
+	mwanachamaassetmanager.ErrAssetNotFound:              http.StatusNotFound,
+	mwanachamaassetmanager.ErrLocationNotFound:           http.StatusNotFound,
+	mwanachamaassetmanager.ErrAssetTrackingModeImmutable: http.StatusConflict,
+	mwanachamaassetmanager.ErrAssetHasOpenHolds:          http.StatusConflict,
+	mwanachamaassetmanager.ErrInvalidAsset:               http.StatusBadRequest,
+	mwanachamaassetmanager.ErrAssetSerialTagExists:       http.StatusBadRequest,
 }
 
 func writeAssetErr(w http.ResponseWriter, err error) {
-	code := assetStatusFor(err)
+	code := httpwire.StatusFor(err, assetStatusTable, http.StatusInternalServerError)
 	if code == http.StatusInternalServerError {
-		writeErr(w, code, "internal error")
+		httpwire.WriteErr(w, code, "internal error")
 		return
 	}
-	writeErr(w, code, err.Error())
+	httpwire.WriteErr(w, code, err.Error())
 }
 
 // CreateAsset handles POST — decode, create, encode.
 func CreateAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in mwanachamaassetmanager.Asset
-		if err := readJSON(r, &in); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &in); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		out, err := am.CreateAsset(r.Context(), in)
@@ -50,7 +44,7 @@ func CreateAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeAssetErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, out)
+		httpwire.WriteJSON(w, http.StatusCreated, out)
 	}
 }
 
@@ -62,7 +56,7 @@ func GetAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeAssetErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -83,8 +77,8 @@ type assetEditBody struct {
 func UpdateAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body assetEditBody
-		if err := readJSON(r, &body); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &body); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		in := mwanachamaassetmanager.Asset{
@@ -99,7 +93,7 @@ func UpdateAsset(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeAssetErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -129,7 +123,7 @@ func ListAssets(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeAssetErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -142,7 +136,7 @@ func GetAssetBalance(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		locationID := r.URL.Query().Get("location_id")
 		if locationID == "" {
-			writeErr(w, http.StatusBadRequest, "location_id is required")
+			httpwire.WriteErr(w, http.StatusBadRequest, "location_id is required")
 			return
 		}
 		balance, err := am.GetAssetBalance(r.Context(), r.PathValue("assetID"), locationID)
@@ -150,6 +144,6 @@ func GetAssetBalance(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeAssetErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]int64{"balance": balance})
+		httpwire.WriteJSON(w, http.StatusOK, map[string]int64{"balance": balance})
 	}
 }

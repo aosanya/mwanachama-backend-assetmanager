@@ -4,47 +4,41 @@
 package routes
 
 import (
-	"errors"
 	"net/http"
+
+	"github.com/aosanya/mwanachama-backend-shared/httpwire"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
 
-// movementStatusFor maps this package's Movement error sentinels to a
+// movementStatusTable maps this package's Movement error sentinels to a
 // status code. ErrAssetNotFound/ErrLocationNotFound are included because
 // PostMovement returns them raw (not wrapped in ErrInvalidMovement) when
 // the referenced asset itself doesn't exist — see movement.go's
 // PostMovement.
-func movementStatusFor(err error) int {
-	switch {
-	case errors.Is(err, mwanachamaassetmanager.ErrMovementNotFound),
-		errors.Is(err, mwanachamaassetmanager.ErrAssetNotFound),
-		errors.Is(err, mwanachamaassetmanager.ErrLocationNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, mwanachamaassetmanager.ErrMovementAlreadyReversed):
-		return http.StatusConflict
-	case errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement):
-		return http.StatusBadRequest
-	default:
-		return http.StatusInternalServerError
-	}
+var movementStatusTable = map[error]int{
+	mwanachamaassetmanager.ErrMovementNotFound:        http.StatusNotFound,
+	mwanachamaassetmanager.ErrAssetNotFound:           http.StatusNotFound,
+	mwanachamaassetmanager.ErrLocationNotFound:        http.StatusNotFound,
+	mwanachamaassetmanager.ErrMovementAlreadyReversed: http.StatusConflict,
+	mwanachamaassetmanager.ErrInvalidMovement:         http.StatusBadRequest,
 }
 
 func writeMovementErr(w http.ResponseWriter, err error) {
-	code := movementStatusFor(err)
+	code := httpwire.StatusFor(err, movementStatusTable, http.StatusInternalServerError)
 	if code == http.StatusInternalServerError {
-		writeErr(w, code, "internal error")
+		httpwire.WriteErr(w, code, "internal error")
 		return
 	}
-	writeErr(w, code, err.Error())
+	httpwire.WriteErr(w, code, err.Error())
 }
 
 // PostMovement handles POST — decode, post, encode.
 func PostMovement(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in mwanachamaassetmanager.Movement
-		if err := readJSON(r, &in); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &in); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		out, err := am.PostMovement(r.Context(), in)
@@ -52,7 +46,7 @@ func PostMovement(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeMovementErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, out)
+		httpwire.WriteJSON(w, http.StatusCreated, out)
 	}
 }
 
@@ -64,7 +58,7 @@ func GetMovement(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeMovementErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -82,7 +76,7 @@ func ListMovements(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeMovementErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -99,8 +93,8 @@ type reverseMovementBody struct {
 func ReverseMovement(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body reverseMovementBody
-		if err := readJSON(r, &body); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &body); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		out, err := am.ReverseMovement(r.Context(), r.PathValue("movementID"), body.PerformedBy, body.Note)
@@ -108,6 +102,6 @@ func ReverseMovement(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeMovementErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, out)
+		httpwire.WriteJSON(w, http.StatusCreated, out)
 	}
 }

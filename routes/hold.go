@@ -4,51 +4,45 @@
 package routes
 
 import (
-	"errors"
 	"net/http"
+
+	"github.com/aosanya/mwanachama-backend-shared/httpwire"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
 
-// holdStatusFor maps this package's Hold error sentinels to a status code.
-// ErrAssetNotFound/ErrLocationNotFound are included because CreateHold
-// returns them raw (not wrapped in ErrInvalidHold) when the referenced
-// asset or location doesn't exist — see hold.go's CreateHold.
+// holdStatusTable maps this package's Hold error sentinels to a status
+// code. ErrAssetNotFound/ErrLocationNotFound are included because
+// CreateHold returns them raw (not wrapped in ErrInvalidHold) when the
+// referenced asset or location doesn't exist — see hold.go's CreateHold.
 // ErrInvalidMovement is included because CommitHold posts a Movement
 // internally and returns that error unwrapped when its own kind check
 // fails.
-func holdStatusFor(err error) int {
-	switch {
-	case errors.Is(err, mwanachamaassetmanager.ErrHoldNotFound),
-		errors.Is(err, mwanachamaassetmanager.ErrAssetNotFound),
-		errors.Is(err, mwanachamaassetmanager.ErrLocationNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, mwanachamaassetmanager.ErrInvalidHoldStatusTransition),
-		errors.Is(err, mwanachamaassetmanager.ErrInsufficientAvailable):
-		return http.StatusConflict
-	case errors.Is(err, mwanachamaassetmanager.ErrInvalidHold),
-		errors.Is(err, mwanachamaassetmanager.ErrInvalidMovement):
-		return http.StatusBadRequest
-	default:
-		return http.StatusInternalServerError
-	}
+var holdStatusTable = map[error]int{
+	mwanachamaassetmanager.ErrHoldNotFound:                http.StatusNotFound,
+	mwanachamaassetmanager.ErrAssetNotFound:               http.StatusNotFound,
+	mwanachamaassetmanager.ErrLocationNotFound:            http.StatusNotFound,
+	mwanachamaassetmanager.ErrInvalidHoldStatusTransition: http.StatusConflict,
+	mwanachamaassetmanager.ErrInsufficientAvailable:       http.StatusConflict,
+	mwanachamaassetmanager.ErrInvalidHold:                 http.StatusBadRequest,
+	mwanachamaassetmanager.ErrInvalidMovement:             http.StatusBadRequest,
 }
 
 func writeHoldErr(w http.ResponseWriter, err error) {
-	code := holdStatusFor(err)
+	code := httpwire.StatusFor(err, holdStatusTable, http.StatusInternalServerError)
 	if code == http.StatusInternalServerError {
-		writeErr(w, code, "internal error")
+		httpwire.WriteErr(w, code, "internal error")
 		return
 	}
-	writeErr(w, code, err.Error())
+	httpwire.WriteErr(w, code, err.Error())
 }
 
 // CreateHold handles POST — decode, create, encode.
 func CreateHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in mwanachamaassetmanager.Hold
-		if err := readJSON(r, &in); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &in); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		out, err := am.CreateHold(r.Context(), in)
@@ -56,7 +50,7 @@ func CreateHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeHoldErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, out)
+		httpwire.WriteJSON(w, http.StatusCreated, out)
 	}
 }
 
@@ -68,7 +62,7 @@ func GetHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeHoldErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -93,8 +87,8 @@ type commitHoldResponse struct {
 func CommitHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body commitHoldBody
-		if err := readJSON(r, &body); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &body); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		hold, movement, err := am.CommitHold(r.Context(), r.PathValue("holdID"), body.Quantity, body.Kind, body.ToLocationID, body.PerformedBy)
@@ -102,7 +96,7 @@ func CommitHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeHoldErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, commitHoldResponse{Hold: hold, Movement: movement})
+		httpwire.WriteJSON(w, http.StatusOK, commitHoldResponse{Hold: hold, Movement: movement})
 	}
 }
 
@@ -114,7 +108,7 @@ func ReleaseHold(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeHoldErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -133,7 +127,7 @@ func ListHolds(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeHoldErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -145,7 +139,7 @@ func ListHoldsExpiredAsOf(am mwanachamaassetmanager.AssetManager) http.HandlerFu
 	return func(w http.ResponseWriter, r *http.Request) {
 		cutoff := r.URL.Query().Get("cutoff")
 		if cutoff == "" {
-			writeErr(w, http.StatusBadRequest, "cutoff is required")
+			httpwire.WriteErr(w, http.StatusBadRequest, "cutoff is required")
 			return
 		}
 		out, err := am.ListHoldsExpiredAsOf(r.Context(), cutoff)
@@ -153,6 +147,6 @@ func ListHoldsExpiredAsOf(am mwanachamaassetmanager.AssetManager) http.HandlerFu
 			writeHoldErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }

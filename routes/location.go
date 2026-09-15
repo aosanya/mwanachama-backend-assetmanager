@@ -4,42 +4,36 @@
 package routes
 
 import (
-	"errors"
 	"net/http"
+
+	"github.com/aosanya/mwanachama-backend-shared/httpwire"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
 
-// locationStatusFor maps this package's Location error sentinels to a
+// locationStatusTable maps this package's Location error sentinels to a
 // status code.
-func locationStatusFor(err error) int {
-	switch {
-	case errors.Is(err, mwanachamaassetmanager.ErrLocationNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, mwanachamaassetmanager.ErrLocationNotEmpty):
-		return http.StatusConflict
-	case errors.Is(err, mwanachamaassetmanager.ErrInvalidLocation):
-		return http.StatusBadRequest
-	default:
-		return http.StatusInternalServerError
-	}
+var locationStatusTable = map[error]int{
+	mwanachamaassetmanager.ErrLocationNotFound: http.StatusNotFound,
+	mwanachamaassetmanager.ErrLocationNotEmpty: http.StatusConflict,
+	mwanachamaassetmanager.ErrInvalidLocation:  http.StatusBadRequest,
 }
 
 func writeLocationErr(w http.ResponseWriter, err error) {
-	code := locationStatusFor(err)
+	code := httpwire.StatusFor(err, locationStatusTable, http.StatusInternalServerError)
 	if code == http.StatusInternalServerError {
-		writeErr(w, code, "internal error")
+		httpwire.WriteErr(w, code, "internal error")
 		return
 	}
-	writeErr(w, code, err.Error())
+	httpwire.WriteErr(w, code, err.Error())
 }
 
 // CreateLocation handles POST — decode, create, encode.
 func CreateLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in mwanachamaassetmanager.Location
-		if err := readJSON(r, &in); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &in); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		out, err := am.CreateLocation(r.Context(), in)
@@ -47,7 +41,7 @@ func CreateLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeLocationErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, out)
+		httpwire.WriteJSON(w, http.StatusCreated, out)
 	}
 }
 
@@ -59,7 +53,7 @@ func GetLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeLocationErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -78,8 +72,8 @@ type locationEditBody struct {
 func UpdateLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body locationEditBody
-		if err := readJSON(r, &body); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		if err := httpwire.ReadJSON(r, &body); err != nil {
+			httpwire.WriteErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		in := mwanachamaassetmanager.Location{
@@ -93,7 +87,7 @@ func UpdateLocation(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeLocationErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -122,7 +116,7 @@ func ListLocations(am mwanachamaassetmanager.AssetManager) http.HandlerFunc {
 			writeLocationErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -134,6 +128,6 @@ func ListDescendantLocations(am mwanachamaassetmanager.AssetManager) http.Handle
 			writeLocationErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, out)
+		httpwire.WriteJSON(w, http.StatusOK, out)
 	}
 }

@@ -7,11 +7,12 @@
 // HTTP/gRPC layer of its own") at the user's explicit request, after the
 // entitygraph→GORM storage swap (see CLAUDE.md and
 // documentation/3. implementation/todo_done.md's A11). Mirrors
-// mwanachama-backend-actor/routes' shape and conventions on purpose: [Route]/
-// [Route.Pattern], one XRoutes function per aggregate concatenated by
-// [Routes], writeJSON/writeErr/readJSON, and decode-call-encode handlers
-// with no caller-identity gate of their own — a route built from this
-// package still needs an auth/capability check wrapped around it by
+// mwanachama-backend-actor/routes' shape and conventions on purpose: [Route]
+// (an alias for mwanachama-backend-shared/httpwire.Route)/[Route.Pattern],
+// one XRoutes function per aggregate concatenated by [Routes],
+// httpwire.WriteJSON/WriteErr/ReadJSON/StatusFor, and decode-call-encode
+// handlers with no caller-identity gate of their own — a route built from
+// this package still needs an auth/capability check wrapped around it by
 // whatever mounts it, the same way actor's routes package leaves that to
 // its own mounting process.
 //

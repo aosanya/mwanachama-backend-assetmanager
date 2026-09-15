@@ -3,25 +3,16 @@ package routes
 import (
 	"net/http"
 
+	"github.com/aosanya/mwanachama-backend-shared/httpwire"
+
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
 
-// Route is one address this package answers, relative to wherever the
-// mounting process prefixes it (e.g. "/v1/assets"). Path uses net/http's
-// ServeMux pattern syntax ("{assetID}" etc.), so the mounting process only
-// ever needs prefix+rt.Path, never its own copy of the path text.
-type Route struct {
-	Method  string
-	Path    string
-	Handler http.HandlerFunc
-}
-
-// Pattern returns the http.ServeMux registration pattern for this route
-// once mounted under prefix — r.Method+" "+prefix+r.Path, net/http's own
-// "METHOD /path" syntax (Go 1.22+ mux patterns).
-func (r Route) Pattern(prefix string) string {
-	return r.Method + " " + prefix + r.Path
-}
+// Route is httpwire.Route — one address this package answers, relative to
+// wherever the mounting process prefixes it (e.g. "/v1/assets"). Kept as a
+// local alias so this package's own exported signatures don't force every
+// caller to import httpwire just to spell the type.
+type Route = httpwire.Route
 
 // LocationRoutes is the six Location operations CreateLocation/GetLocation/
 // UpdateLocation/DeleteLocation/ListLocations/ListDescendantLocations,

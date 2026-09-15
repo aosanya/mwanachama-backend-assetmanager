@@ -12,41 +12,24 @@ package mwanachamaassetmanager_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
-	gormpostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/aosanya/mwanachama-backend-shared/gormtest"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-shared/postgres"
 )
 
 // newPostgresAssetManager opens POSTGRES_URL via
-// mwanachama-backend-shared/postgres.Open (the same DSN parsing, pgx
-// driver, and pooling every other repo already uses), wraps that connection
-// with GORM's Postgres dialector, migrates a unique-enough table prefix,
-// and returns a ready-to-use AssetManager. Skips the calling test if
-// POSTGRES_URL is unset. Tables are dropped on cleanup.
+// mwanachama-backend-shared/gormtest.OpenPostgresDB (the same DSN parsing,
+// pgx driver, and pooling every other repo already uses), migrates a
+// unique-enough table prefix, and returns a ready-to-use AssetManager.
+// Skips the calling test if POSTGRES_URL is unset. Tables are dropped on
+// cleanup.
 func newPostgresAssetManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	t.Helper()
-	dsn := os.Getenv("POSTGRES_URL")
-	if dsn == "" {
-		t.Skip("POSTGRES_URL not set; skipping Postgres integration test (see Makefile's test-pg target)")
-	}
-
-	ctx := context.Background()
-	sqlDB, err := postgres.Open(ctx, postgres.Config{DSN: dsn})
-	if err != nil {
-		t.Fatalf("postgres.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-
-	db, err := gorm.Open(gormpostgres.New(gormpostgres.Config{Conn: sqlDB}), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open: %v", err)
-	}
+	db, cleanup := gormtest.OpenPostgresDB(t, "assetit")
+	t.Cleanup(cleanup)
 
 	// A unique-enough prefix per test keeps concurrent -run invocations from
 	// colliding on the same physical tables.

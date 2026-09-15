@@ -3,8 +3,7 @@ package mwanachamaassetmanager_test
 import (
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
+	"github.com/aosanya/mwanachama-backend-shared/gormtest"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
@@ -19,10 +18,7 @@ import (
 // postgres_integration_test.go.
 func newTestManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open: %v", err)
-	}
+	db := gormtest.OpenSQLiteDB(t)
 
 	tables := mwanachamaassetmanager.DefaultTableNames("test")
 	if err := mwanachamaassetmanager.Migrate(db, tables); err != nil {

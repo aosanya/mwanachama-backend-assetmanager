@@ -28,6 +28,7 @@ import (
 // only source of truth for balance) and the denormalized LocationID stale
 // until the next movement corrects it.
 func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (models.Movement, error) {
+	mv.ID = "" // server-minted; a caller-supplied id is never honoured
 	shape, err := validateMovementShape(mv)
 	if err != nil {
 		return models.Movement{}, err

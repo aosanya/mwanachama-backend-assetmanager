@@ -24,6 +24,7 @@ import (
 // database-level guard against two concurrent creates both passing this
 // check.
 func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.Asset, error) {
+	a.ID = "" // server-minted; a caller-supplied id is never honoured
 	if a.Name == "" {
 		return models.Asset{}, fmt.Errorf("%w: Asset.Name is required", ErrInvalidAsset)
 	}

@@ -26,6 +26,7 @@ import (
 // balance at that location minus what every other still-open
 // ([models.HoldStatusReserved]) hold there has already reserved.
 func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Hold, error) {
+	h.ID = "" // server-minted; a caller-supplied id is never honoured
 	if h.AssetID == "" {
 		return models.Hold{}, fmt.Errorf("%w: AssetID is required", ErrInvalidHold)
 	}

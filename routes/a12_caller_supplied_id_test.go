@@ -22,20 +22,10 @@ func a12Mux(am mwanachamaassetmanager.AssetManager) *http.ServeMux {
 	return m
 }
 
-// Pins board row A12: every Create<Type> method (CreateAsset, CreateLocation,
-// CreateHold, PostMovement) honors a caller-supplied "id" instead of always
-// minting its own — directly contradicting each type's own doc comment
-// ("ID is ... Set by the backend on creation; callers should leave it empty
-// in create requests", see models/asset.go, location.go, hold.go,
-// movement.go). The row struct's BeforeCreate hook only mints a UUID
-// `if r.ID == ""` (gormstore), and none of the four manager methods clears
-// the caller's value first.
-//
-// Once A12 is fixed (each Create<Type> clearing .ID before building the
-// row, the same fix mwanachama-backend-agency's AG21 and
-// mwanachama-backend-taskmanager's W11 applied), these four assertions
-// flip: the returned id must NOT equal the caller-supplied value.
-func TestCreateAsset_PinsCallerSuppliedIDIsHonored(t *testing.T) {
+// Board row A12: every Create<Type> method (CreateAsset, CreateLocation,
+// CreateHold, PostMovement) clears a caller-supplied "id" and mints its own,
+// as each type's doc comment promises.
+func TestCreateAsset_IgnoresCallerSuppliedID(t *testing.T) {
 	am := newTestManager(t)
 	m := a12Mux(am)
 
@@ -51,17 +41,14 @@ func TestCreateAsset_PinsCallerSuppliedIDIsHonored(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.ID != wanted {
-		t.Fatalf("A12 appears fixed for CreateAsset (got %q) — update this pin", out.ID)
+	if out.ID == wanted {
+		t.Fatalf("a caller-supplied id was honoured (got %q) — the server must mint its own", out.ID)
 	}
 }
 
-// Pins A12's second half on Asset: re-POSTing the same id hits the sqlite/
-// Postgres primary-key constraint, which this repo's errors.go has no
-// sentinel for at all (unlike mwanachama-backend-actor's ErrDuplicateID or
-// mwanachama-backend-comm's ErrConflict) — so writeAssetErr's default arm
-// answers an opaque 500 instead of a clean 409.
-func TestCreateAsset_PinsDuplicateCallerSuppliedIDReturns500NotConflict(t *testing.T) {
+// A12's second half on Asset: re-POSTing the same body mints a second
+// distinct row instead of colliding on the primary key.
+func TestCreateAsset_DuplicateCallerSuppliedIDMintsDistinctIDs(t *testing.T) {
 	am := newTestManager(t)
 	m := a12Mux(am)
 
@@ -76,12 +63,22 @@ func TestCreateAsset_PinsDuplicateCallerSuppliedIDReturns500NotConflict(t *testi
 	second := httptest.NewRequest("POST", "/assets", strings.NewReader(body))
 	secondRec := httptest.NewRecorder()
 	m.ServeHTTP(secondRec, second)
-	if secondRec.Code != http.StatusInternalServerError {
-		t.Fatalf("A12 appears fixed: duplicate id now returns %d (body %s), not the unmapped 500 this pin expects", secondRec.Code, secondRec.Body.String())
+	if secondRec.Code != http.StatusCreated {
+		t.Fatalf("second create: got %d, body %s", secondRec.Code, secondRec.Body.String())
+	}
+	var a, b mwanachamaassetmanager.Asset
+	if err := json.Unmarshal(firstRec.Body.Bytes(), &a); err != nil {
+		t.Fatalf("decode first: %v", err)
+	}
+	if err := json.Unmarshal(secondRec.Body.Bytes(), &b); err != nil {
+		t.Fatalf("decode second: %v", err)
+	}
+	if a.ID == b.ID || a.ID == "attacker-chosen-asset-id-2" || b.ID == "attacker-chosen-asset-id-2" {
+		t.Fatalf("expected two distinct server-minted ids, got %q and %q", a.ID, b.ID)
 	}
 }
 
-func TestCreateLocation_PinsCallerSuppliedIDIsHonored(t *testing.T) {
+func TestCreateLocation_IgnoresCallerSuppliedID(t *testing.T) {
 	am := newTestManager(t)
 	m := a12Mux(am)
 
@@ -97,12 +94,12 @@ func TestCreateLocation_PinsCallerSuppliedIDIsHonored(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.ID != wanted {
-		t.Fatalf("A12 appears fixed for CreateLocation (got %q) — update this pin", out.ID)
+	if out.ID == wanted {
+		t.Fatalf("a caller-supplied id was honoured (got %q) — the server must mint its own", out.ID)
 	}
 }
 
-func TestCreateHold_PinsCallerSuppliedIDIsHonored(t *testing.T) {
+func TestCreateHold_IgnoresCallerSuppliedID(t *testing.T) {
 	am := newTestManager(t)
 	m := a12Mux(am)
 
@@ -130,12 +127,12 @@ func TestCreateHold_PinsCallerSuppliedIDIsHonored(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.ID != wanted {
-		t.Fatalf("A12 appears fixed for CreateHold (got %q) — update this pin", out.ID)
+	if out.ID == wanted {
+		t.Fatalf("a caller-supplied id was honoured (got %q) — the server must mint its own", out.ID)
 	}
 }
 
-func TestPostMovement_PinsCallerSuppliedIDIsHonored(t *testing.T) {
+func TestPostMovement_IgnoresCallerSuppliedID(t *testing.T) {
 	am := newTestManager(t)
 	m := a12Mux(am)
 
@@ -157,7 +154,7 @@ func TestPostMovement_PinsCallerSuppliedIDIsHonored(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.ID != wanted {
-		t.Fatalf("A12 appears fixed for PostMovement (got %q) — update this pin", out.ID)
+	if out.ID == wanted {
+		t.Fatalf("a caller-supplied id was honoured (got %q) — the server must mint its own", out.ID)
 	}
 }

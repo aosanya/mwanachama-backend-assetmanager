@@ -18,6 +18,7 @@ import (
 // CreateLocation creates a new Location row. When l.ParentLocationID is
 // set, the parent must already exist.
 func (m *assetManager) CreateLocation(ctx context.Context, l models.Location) (models.Location, error) {
+	l.ID = "" // server-minted; a caller-supplied id is never honoured
 	if l.Name == "" {
 		return models.Location{}, fmt.Errorf("%w: Location.Name is required", ErrInvalidLocation)
 	}

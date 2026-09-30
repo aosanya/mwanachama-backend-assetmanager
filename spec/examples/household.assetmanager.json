@@ -1,0 +1,111 @@
+{
+  "module": "assetmanager",
+  "domain": "household",
+  "instance": "household",
+  "objects": [
+    {
+      "role": "location",
+      "name": "room",
+      "table": "rooms",
+      "description": "Somewhere in the house a thing can be: a room, a cupboard inside it, a shelf inside that.",
+      "fields": [{ "name": "kind", "default": "room" }],
+      "indexes": [
+        {
+          "name": "name",
+          "description": "Finds a room by what the household calls it, which is how anyone actually searches.",
+          "fields": ["name"],
+          "not_deleted": true
+        }
+      ]
+    },
+    {
+      "role": "asset",
+      "name": "belonging",
+      "table": "belongings",
+      "description": "Something the household owns: one appliance with a serial number, or a count of something bought by the box.",
+      "indexes": [
+        {
+          "name": "category",
+          "description": "The insurance inventory, grouped the way a claim form asks for it.",
+          "fields": ["category"],
+          "not_deleted": true
+        }
+      ]
+    },
+    {
+      "role": "movement",
+      "name": "relocation",
+      "table": "relocations",
+      "description": "A record of something being moved, brought home, used up or given away.",
+      "indexes": [
+        {
+          "name": "occurred",
+          "description": "\"When did we last see it?\", read newest first.",
+          "fields": ["occurred_at"]
+        }
+      ]
+    },
+    {
+      "role": "hold",
+      "name": "reservation",
+      "table": "reservations",
+      "description": "Something set aside for a known purpose — packed for a trip, promised to a neighbour — so nobody counts it as available.",
+      "indexes": [
+        {
+          "name": "due_back",
+          "description": "What is set aside and past the day it was meant for, without going through the status the sweep reads.",
+          "fields": ["expires_at"]
+        }
+      ]
+    },
+    {
+      "role": "code_sequence",
+      "name": "code_sequence",
+      "table": "code_sequences",
+      "description": "The counters behind room and belonging codes."
+    },
+    {
+      "name": "warranty",
+      "table": "warranties",
+      "description": "A household's own record of what is still under warranty. The module knows nothing about this — it is declared here because a domain that needs a field of its own declares an object of its own.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "description": "Storage key.",
+          "primary": true
+        },
+        {
+          "name": "belonging_id",
+          "type": "string",
+          "description": "The belonging this warranty covers.",
+          "required": true
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "description": "Who honours the warranty.",
+          "required": true
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "description": "When cover ends.",
+          "required": true
+        },
+        {
+          "name": "document",
+          "type": "text",
+          "description": "Where the paperwork is, or a scan of it."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "belonging",
+          "description": "Finds the cover on one belonging.",
+          "fields": ["belonging_id"]
+        }
+      ]
+    }
+  ]
+}

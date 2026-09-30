@@ -1,0 +1,67 @@
+{
+  "module": "assetmanager",
+  "domain": "warehouse",
+  "instance": "warehouse",
+  "objects": [
+    {
+      "role": "location",
+      "name": "bin",
+      "table": "bins",
+      "description": "A place stock sits: a whole warehouse, an aisle within it, a rack, or one addressable bin.",
+      "indexes": [
+        {
+          "name": "kind",
+          "description": "The picking screen's \"show me the bins, not the aisles\" filter.",
+          "fields": ["kind"],
+          "not_deleted": true
+        }
+      ]
+    },
+    {
+      "role": "asset",
+      "name": "stock_item",
+      "table": "stock_items",
+      "description": "A line of stock: a pallet of one SKU, or one serial-numbered piece of equipment.",
+      "indexes": [
+        {
+          "name": "category",
+          "description": "Groups the stock list by the warehouse's own product grouping.",
+          "fields": ["category"],
+          "not_deleted": true
+        }
+      ]
+    },
+    {
+      "role": "movement",
+      "name": "stock_move",
+      "table": "stock_moves",
+      "description": "One line of the stock ledger: a receipt, a putaway, a pick, or a cycle-count correction.",
+      "indexes": [
+        {
+          "name": "occurred",
+          "description": "The day's stock journal, read newest first.",
+          "fields": ["occurred_at"]
+        }
+      ]
+    },
+    {
+      "role": "hold",
+      "name": "allocation",
+      "table": "allocations",
+      "description": "Stock allocated to an order and not yet picked, so a second order cannot promise the same units.",
+      "indexes": [
+        {
+          "name": "placed_by",
+          "description": "What one picker currently has allocated to them.",
+          "fields": ["placed_by"]
+        }
+      ]
+    },
+    {
+      "role": "code_sequence",
+      "name": "code_sequence",
+      "table": "code_sequences",
+      "description": "The counters behind bin and stock-item codes."
+    }
+  ]
+}

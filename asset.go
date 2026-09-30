@@ -1,4 +1,3 @@
-// asset.go — Asset CRUD for [assetManager].
 package mwanachamaassetmanager
 
 import (
@@ -9,22 +8,13 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/aosanya/mwanachama-backend-assetmanager/gormstore"
+	"github.com/aosanya/mwanachama-backend-shared/specstore"
+
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
-// CreateAsset creates a new Asset row. It does not establish any balance —
-// an Asset row with no Movement against it holds nothing anywhere; balance
-// always comes from folding the Movement ledger (see movement.go's
-// GetAssetBalance). LocationID, if set, is an informational starting point
-// only.
-//
-// SerialTag uniqueness is checked here as a pre-check (friendly error
-// before any write); gormstore.Migrate's partial unique index is the
-// database-level guard against two concurrent creates both passing this
-// check.
 func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.Asset, error) {
-	a.ID = "" // server-minted; a caller-supplied id is never honoured
+	a.ID = newID()
 	if a.Name == "" {
 		return models.Asset{}, fmt.Errorf("%w: Asset.Name is required", ErrInvalidAsset)
 	}
@@ -34,7 +24,7 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 			return models.Asset{}, fmt.Errorf("%w: SerialTag is required for a serialized asset", ErrInvalidAsset)
 		}
 		var count int64
-		err := m.db.WithContext(ctx).Table(m.tables.Assets).
+		err := m.store.Query(ctx, roleAsset).
 			Where("serial_tag = ? AND deleted = ?", a.SerialTag, false).Count(&count).Error
 		if err != nil {
 			return models.Asset{}, fmt.Errorf("CreateAsset: %w", err)
@@ -43,7 +33,6 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 			return models.Asset{}, ErrAssetSerialTagExists
 		}
 	case models.AssetTrackingModeFungible:
-		// No serial tag expected; nothing further to validate here.
 	default:
 		return models.Asset{}, fmt.Errorf("%w: TrackingMode must be %q or %q, got %q",
 			ErrInvalidAsset, models.AssetTrackingModeSerialized, models.AssetTrackingModeFungible, a.TrackingMode)
@@ -61,41 +50,36 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 	a.CreatedAt = now
 	a.UpdatedAt = now
 
-	var row gormstore.AssetRow
 	err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		code, err := gormstore.NextCode(ctx, tx, m.tables.CodeSequences, "asset", "A")
+		code, err := m.nextCode(ctx, tx, roleAsset, "A")
 		if err != nil {
 			return err
 		}
 		a.Code = code
-		row = gormstore.AssetToRow(a)
-		return tx.Table(m.tables.Assets).Create(&row).Error
+		row, err := encode(m.store.Object(roleAsset), a)
+		if err != nil {
+			return err
+		}
+		return tx.WithContext(ctx).Table(m.store.Table(roleAsset)).Create(row).Error
 	})
 	if err != nil {
 		return models.Asset{}, fmt.Errorf("CreateAsset: %w", err)
 	}
-	return gormstore.AssetFromRow(row), nil
+	return a, nil
 }
 
-// GetAsset reads a single non-deleted Asset row.
 func (m *assetManager) GetAsset(ctx context.Context, assetID string) (models.Asset, error) {
-	var row gormstore.AssetRow
-	err := m.db.WithContext(ctx).Table(m.tables.Assets).
-		Where("id = ? AND deleted = ?", assetID, false).First(&row).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return models.Asset{}, ErrAssetNotFound
+	var out models.Asset
+	q := m.store.Query(ctx, roleAsset).Where("id = ? AND deleted = ?", assetID, false)
+	if err := m.store.Take(q, roleAsset, &out, ErrAssetNotFound); err != nil {
+		if errors.Is(err, ErrAssetNotFound) {
+			return models.Asset{}, err
 		}
 		return models.Asset{}, fmt.Errorf("GetAsset: %w", err)
 	}
-	return gormstore.AssetFromRow(row), nil
+	return out, nil
 }
 
-// UpdateAsset patches Name/Category/AttributesJSON/SerialTag. TrackingMode
-// and LocationID are not caller-writable here: changing TrackingMode after
-// creation would silently invalidate every prior Movement's balance
-// semantics ([ErrAssetTrackingModeImmutable]), and LocationID is a
-// derived field only PostMovement/ReverseMovement may update.
 func (m *assetManager) UpdateAsset(ctx context.Context, a models.Asset) (models.Asset, error) {
 	current, err := m.GetAsset(ctx, a.ID)
 	if err != nil {
@@ -109,13 +93,13 @@ func (m *assetManager) UpdateAsset(ctx context.Context, a models.Asset) (models.
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	err = m.db.WithContext(ctx).Table(m.tables.Assets).Where("id = ?", a.ID).
+	err = m.store.Query(ctx, roleAsset).Where("id = ?", a.ID).
 		Updates(map[string]any{
-			"name":            a.Name,
-			"category":        a.Category,
-			"attributes_json": a.AttributesJSON,
-			"serial_tag":      a.SerialTag,
-			"updated_at":      now,
+			columnName("Name"):           a.Name,
+			columnName("Category"):       a.Category,
+			columnName("AttributesJSON"): a.AttributesJSON,
+			columnName("SerialTag"):      a.SerialTag,
+			columnName("UpdatedAt"):      now,
 		}).Error
 	if err != nil {
 		return models.Asset{}, fmt.Errorf("UpdateAsset: %w", err)
@@ -128,9 +112,6 @@ func (m *assetManager) UpdateAsset(ctx context.Context, a models.Asset) (models.
 	return current, nil
 }
 
-// DeleteAsset soft-deletes the Asset row. Refused with
-// [ErrAssetHasOpenHolds] if the asset has any Hold still in
-// [models.HoldStatusReserved] — release or commit those first.
 func (m *assetManager) DeleteAsset(ctx context.Context, assetID string) error {
 	if _, err := m.GetAsset(ctx, assetID); err != nil {
 		return err
@@ -144,18 +125,19 @@ func (m *assetManager) DeleteAsset(ctx context.Context, assetID string) error {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	err = m.db.WithContext(ctx).Table(m.tables.Assets).Where("id = ?", assetID).
-		Updates(map[string]any{"deleted": true, "updated_at": now}).Error
+	err = m.store.Query(ctx, roleAsset).Where("id = ?", assetID).
+		Updates(map[string]any{
+			columnName("Deleted"):   true,
+			columnName("UpdatedAt"): now,
+		}).Error
 	if err != nil {
 		return fmt.Errorf("DeleteAsset: %w", err)
 	}
 	return nil
 }
 
-// ListAssets returns all non-deleted Asset rows that match the filter, id
-// order.
 func (m *assetManager) ListAssets(ctx context.Context, filter AssetFilter) ([]models.Asset, error) {
-	q := m.db.WithContext(ctx).Table(m.tables.Assets).Where("deleted = ?", false)
+	q := m.store.Query(ctx, roleAsset).Where("deleted = ?", false)
 	if filter.Category != "" {
 		q = q.Where("category = ?", filter.Category)
 	}
@@ -166,13 +148,9 @@ func (m *assetManager) ListAssets(ctx context.Context, filter AssetFilter) ([]mo
 		q = q.Where("location_id = ?", filter.LocationID)
 	}
 
-	var rows []gormstore.AssetRow
-	if err := q.Order("id").Find(&rows).Error; err != nil {
+	out, err := specstore.List[models.Asset](m.store, q.Order("id"), roleAsset)
+	if err != nil {
 		return nil, fmt.Errorf("ListAssets: %w", err)
-	}
-	out := make([]models.Asset, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, gormstore.AssetFromRow(r))
 	}
 	return out, nil
 }

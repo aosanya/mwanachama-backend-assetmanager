@@ -1,5 +1,3 @@
-// movement.go — the append-only Movement ledger for [assetManager]:
-// PostMovement, ReverseMovement, and GetAssetBalance's fold logic.
 package mwanachamaassetmanager
 
 import (
@@ -8,9 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/aosanya/mwanachama-backend-shared/specstore"
 
-	"github.com/aosanya/mwanachama-backend-assetmanager/gormstore"
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
@@ -28,7 +25,7 @@ import (
 // only source of truth for balance) and the denormalized LocationID stale
 // until the next movement corrects it.
 func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (models.Movement, error) {
-	mv.ID = "" // server-minted; a caller-supplied id is never honoured
+	mv.ID = newID()
 	shape, err := validateMovementShape(mv)
 	if err != nil {
 		return models.Movement{}, err
@@ -51,11 +48,10 @@ func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (mo
 		mv.OccurredAt = now
 	}
 
-	row := gormstore.MovementToRow(mv)
-	if err := m.db.WithContext(ctx).Table(m.tables.Movements).Create(&row).Error; err != nil {
+	if err := m.store.Insert(ctx, roleMovement, mv); err != nil {
 		return models.Movement{}, fmt.Errorf("PostMovement: %w", err)
 	}
-	out := gormstore.MovementFromRow(row)
+	out := mv
 
 	if err := m.syncAssetLocation(ctx, out); err != nil {
 		return out, fmt.Errorf("PostMovement: entry posted (id=%s) but denormalized location sync failed: %w", out.ID, err)
@@ -147,10 +143,10 @@ func (m *assetManager) validateMovementLocations(ctx context.Context, mv models.
 // ToLocationID if the movement arrived somewhere, otherwise cleared (the
 // asset left the system, or a reversal undid its last recorded position).
 func (m *assetManager) syncAssetLocation(ctx context.Context, mv models.Movement) error {
-	err := m.db.WithContext(ctx).Table(m.tables.Assets).Where("id = ?", mv.AssetID).
+	err := m.store.Query(ctx, roleAsset).Where("id = ?", mv.AssetID).
 		Updates(map[string]any{
-			"location_id": mv.ToLocationID,
-			"updated_at":  time.Now().UTC().Format(time.RFC3339),
+			columnName("LocationID"): mv.ToLocationID,
+			columnName("UpdatedAt"):  time.Now().UTC().Format(time.RFC3339),
 		}).Error
 	if err != nil {
 		return fmt.Errorf("syncAssetLocation: %w", err)
@@ -199,11 +195,11 @@ func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performe
 		CreatedAt:          now,
 	}
 
-	row := gormstore.MovementToRow(reversal)
-	if err := m.db.WithContext(ctx).Table(m.tables.Movements).Create(&row).Error; err != nil {
+	reversal.ID = newID()
+	if err := m.store.Insert(ctx, roleMovement, reversal); err != nil {
 		return models.Movement{}, fmt.Errorf("ReverseMovement: %w", err)
 	}
-	out := gormstore.MovementFromRow(row)
+	out := reversal
 
 	if err := m.syncAssetLocation(ctx, out); err != nil {
 		return out, fmt.Errorf("ReverseMovement: entry posted (id=%s) but denormalized location sync failed: %w", out.ID, err)
@@ -213,22 +209,22 @@ func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performe
 
 // GetMovement reads a single Movement row.
 func (m *assetManager) GetMovement(ctx context.Context, movementID string) (models.Movement, error) {
-	var row gormstore.MovementRow
-	err := m.db.WithContext(ctx).Table(m.tables.Movements).Where("id = ?", movementID).First(&row).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return models.Movement{}, ErrMovementNotFound
+	var out models.Movement
+	q := m.store.Query(ctx, roleMovement).Where("id = ?", movementID)
+	if err := m.store.Take(q, roleMovement, &out, ErrMovementNotFound); err != nil {
+		if errors.Is(err, ErrMovementNotFound) {
+			return models.Movement{}, err
 		}
 		return models.Movement{}, fmt.Errorf("GetMovement: %w", err)
 	}
-	return gormstore.MovementFromRow(row), nil
+	return out, nil
 }
 
 // ListMovements returns all Movement rows that match the filter, in no
 // particular guaranteed order (callers folding a balance don't need one —
 // sum is order-independent).
 func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter) ([]models.Movement, error) {
-	q := m.db.WithContext(ctx).Table(m.tables.Movements)
+	q := m.store.Query(ctx, roleMovement)
 	if filter.AssetID != "" {
 		q = q.Where("asset_id = ?", filter.AssetID)
 	}
@@ -236,13 +232,9 @@ func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter)
 		q = q.Where("kind = ?", string(filter.Kind))
 	}
 
-	var rows []gormstore.MovementRow
-	if err := q.Find(&rows).Error; err != nil {
+	out, err := specstore.List[models.Movement](m.store, q, roleMovement)
+	if err != nil {
 		return nil, fmt.Errorf("ListMovements: %w", err)
-	}
-	out := make([]models.Movement, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, gormstore.MovementFromRow(r))
 	}
 	return out, nil
 }

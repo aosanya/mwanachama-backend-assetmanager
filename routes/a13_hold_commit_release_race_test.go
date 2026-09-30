@@ -11,9 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
@@ -32,25 +29,7 @@ import (
 // interleaving this test targets is still fully possible.
 func raceTestManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("db.DB(): %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-
-	tables := mwanachamaassetmanager.DefaultTableNames("race")
-	if err := mwanachamaassetmanager.Migrate(db, tables); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-	mgr, err := mwanachamaassetmanager.NewAssetManager(db, tables)
-	if err != nil {
-		t.Fatalf("NewAssetManager: %v", err)
-	}
-	return mgr
+	return managerOn(t, openDB(t, true), testSpec(t))
 }
 
 func raceMux(am mwanachamaassetmanager.AssetManager) *http.ServeMux {

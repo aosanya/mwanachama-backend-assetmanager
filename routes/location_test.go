@@ -8,28 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func newTestManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open: %v", err)
-	}
-	tables := mwanachamaassetmanager.DefaultTableNames("routes_test")
-	if err := mwanachamaassetmanager.Migrate(db, tables); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-	mgr, err := mwanachamaassetmanager.NewAssetManager(db, tables)
-	if err != nil {
-		t.Fatalf("NewAssetManager: %v", err)
-	}
-	return mgr
+	return managerOn(t, openDB(t, false), testSpec(t))
 }
 
 func withPathValue(req *http.Request, key, value string) *http.Request {

@@ -6,6 +6,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/aosanya/mwanachama-backend-shared/spec"
+
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
@@ -159,19 +161,21 @@ type AssetManager interface {
 	ListHoldsExpiredAsOf(ctx context.Context, cutoffRFC3339 string) ([]models.Hold, error)
 }
 
-// assetManager is the GORM-backed implementation of [AssetManager].
 type assetManager struct {
-	db     *gorm.DB
-	tables TableNames
+	db    *gorm.DB
+	store *store
 }
 
-// NewAssetManager constructs an [AssetManager] backed by db, reading and
-// writing the four tables named by t (see [DefaultTableNames]). Callers
-// must run [Migrate] against the same db and t before use. Returns an error
-// if db is nil.
-func NewAssetManager(db *gorm.DB, t TableNames) (AssetManager, error) {
-	if db == nil {
-		return nil, fmt.Errorf("NewAssetManager: db must not be nil")
+func NewAssetManager(db *gorm.DB, s *spec.Spec) (AssetManager, error) {
+	st, err := newStore(db, s, map[string]any{
+		roleLocation:     models.Location{},
+		roleAsset:        models.Asset{},
+		roleMovement:     models.Movement{},
+		roleHold:         models.Hold{},
+		roleCodeSequence: codeSequence{},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("NewAssetManager: %w", err)
 	}
-	return &assetManager{db: db, tables: t}, nil
+	return &assetManager{db: db, store: st}, nil
 }

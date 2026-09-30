@@ -14,9 +14,8 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/aosanya/mwanachama-backend-shared/specstore"
 
-	"github.com/aosanya/mwanachama-backend-assetmanager/gormstore"
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
@@ -26,7 +25,7 @@ import (
 // balance at that location minus what every other still-open
 // ([models.HoldStatusReserved]) hold there has already reserved.
 func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Hold, error) {
-	h.ID = "" // server-minted; a caller-supplied id is never honoured
+	h.ID = newID()
 	if h.AssetID == "" {
 		return models.Hold{}, fmt.Errorf("%w: AssetID is required", ErrInvalidHold)
 	}
@@ -67,11 +66,10 @@ func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Ho
 	h.CreatedAt = now
 	h.UpdatedAt = now
 
-	row := gormstore.HoldToRow(h)
-	if err := m.db.WithContext(ctx).Table(m.tables.Holds).Create(&row).Error; err != nil {
+	if err := m.store.Insert(ctx, roleHold, h); err != nil {
 		return models.Hold{}, fmt.Errorf("CreateHold: %w", err)
 	}
-	return gormstore.HoldFromRow(row), nil
+	return h, nil
 }
 
 // availableQuantity is the asset's balance at locationID minus the
@@ -96,15 +94,15 @@ func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationI
 
 // GetHold reads a single Hold row.
 func (m *assetManager) GetHold(ctx context.Context, holdID string) (models.Hold, error) {
-	var row gormstore.HoldRow
-	err := m.db.WithContext(ctx).Table(m.tables.Holds).Where("id = ?", holdID).First(&row).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return models.Hold{}, ErrHoldNotFound
+	var out models.Hold
+	q := m.store.Query(ctx, roleHold).Where("id = ?", holdID)
+	if err := m.store.Take(q, roleHold, &out, ErrHoldNotFound); err != nil {
+		if errors.Is(err, ErrHoldNotFound) {
+			return models.Hold{}, err
 		}
 		return models.Hold{}, fmt.Errorf("GetHold: %w", err)
 	}
-	return gormstore.HoldFromRow(row), nil
+	return out, nil
 }
 
 // CommitHold fulfills a reserved Hold — up to quantity of it — by posting a
@@ -151,11 +149,11 @@ func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity i
 	}
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	err = m.db.WithContext(ctx).Table(m.tables.Holds).Where("id = ?", hold.ID).
+	err = m.store.Query(ctx, roleHold).Where("id = ?", hold.ID).
 		Updates(map[string]any{
-			"status":             string(hold.Status),
-			"committed_quantity": hold.CommittedQuantity,
-			"updated_at":         hold.UpdatedAt,
+			columnName("Status"):            string(hold.Status),
+			columnName("CommittedQuantity"): hold.CommittedQuantity,
+			columnName("UpdatedAt"):         hold.UpdatedAt,
 		}).Error
 	if err != nil {
 		return models.Hold{}, movement, fmt.Errorf("CommitHold: movement posted (id=%s) but hold update failed: %w", movement.ID, err)
@@ -177,15 +175,12 @@ func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (models.H
 	hold.Status = models.HoldStatusReleased
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	err = m.db.WithContext(ctx).Table(m.tables.Holds).Where("id = ?", hold.ID).
+	err = m.store.Query(ctx, roleHold).Where("id = ?", hold.ID).
 		Updates(map[string]any{
-			"status":     string(hold.Status),
-			"updated_at": hold.UpdatedAt,
+			columnName("Status"):    string(hold.Status),
+			columnName("UpdatedAt"): hold.UpdatedAt,
 		}).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return models.Hold{}, ErrHoldNotFound
-		}
 		return models.Hold{}, fmt.Errorf("ReleaseHold: %w", err)
 	}
 	return hold, nil
@@ -193,7 +188,7 @@ func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (models.H
 
 // ListHolds returns all Hold rows that match the filter, id order.
 func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]models.Hold, error) {
-	q := m.db.WithContext(ctx).Table(m.tables.Holds)
+	q := m.store.Query(ctx, roleHold)
 	if filter.AssetID != "" {
 		q = q.Where("asset_id = ?", filter.AssetID)
 	}
@@ -204,13 +199,9 @@ func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]mode
 		q = q.Where("status = ?", string(filter.Status))
 	}
 
-	var rows []gormstore.HoldRow
-	if err := q.Order("id").Find(&rows).Error; err != nil {
+	out, err := specstore.List[models.Hold](m.store, q.Order("id"), roleHold)
+	if err != nil {
 		return nil, fmt.Errorf("ListHolds: %w", err)
-	}
-	out := make([]models.Hold, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, gormstore.HoldFromRow(r))
 	}
 	return out, nil
 }

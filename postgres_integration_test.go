@@ -31,17 +31,18 @@ func newPostgresAssetManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 	db, cleanup := gormtest.OpenPostgresDB(t, "assetit")
 	t.Cleanup(cleanup)
 
-	// A unique-enough prefix per test keeps concurrent -run invocations from
-	// colliding on the same physical tables.
-	tables := mwanachamaassetmanager.DefaultTableNames("assetit")
-	if err := mwanachamaassetmanager.Migrate(db, tables); err != nil {
-		t.Fatalf("Migrate: %v", err)
+	s := testSpec(t)
+	if err := mwanachamaassetmanager.Provision(db, s); err != nil {
+		t.Fatalf("Provision: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = db.Migrator().DropTable(tables.Holds, tables.Movements, tables.Assets, tables.Locations)
+		for _, o := range s.Objects {
+			_ = db.Migrator().DropTable(s.TableFor(o))
+		}
+		_ = db.Migrator().DropTable(s.NameRegistryTable())
 	})
 
-	mgr, err := mwanachamaassetmanager.NewAssetManager(db, tables)
+	mgr, err := mwanachamaassetmanager.NewAssetManager(db, s)
 	if err != nil {
 		t.Fatalf("NewAssetManager: %v", err)
 	}

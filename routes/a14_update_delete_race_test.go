@@ -10,8 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/aosanya/mwanachama-backend-shared/spec"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
@@ -23,27 +24,11 @@ import (
 // AssetManager method exposes directly — GetAsset/GetLocation/ListAssets/
 // ListLocations all filter deleted=false, so a deleted row's current
 // content is otherwise unobservable through the public API.
-func raceTestManagerAndDB(t *testing.T) (mwanachamaassetmanager.AssetManager, *gorm.DB, mwanachamaassetmanager.TableNames) {
+func raceTestManagerAndDB(t *testing.T) (mwanachamaassetmanager.AssetManager, *gorm.DB, *spec.Spec) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("gorm.Open: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("db.DB(): %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-
-	tables := mwanachamaassetmanager.DefaultTableNames("a14race")
-	if err := mwanachamaassetmanager.Migrate(db, tables); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-	mgr, err := mwanachamaassetmanager.NewAssetManager(db, tables)
-	if err != nil {
-		t.Fatalf("NewAssetManager: %v", err)
-	}
-	return mgr, db, tables
+	db := openDB(t, true)
+	s := testSpec(t)
+	return managerOn(t, db, s), db, s
 }
 
 func patchJSON(t *testing.T, client *http.Client, url string, body any) *http.Response {
@@ -114,7 +99,7 @@ func TestPinsA14_UpdateAssetCanWriteIntoAnAlreadyDeletedRow(t *testing.T) {
 	writtenIntoDeletedRow := 0
 
 	for i := 0; i < iterations; i++ {
-		am, db, tables := raceTestManagerAndDB(t)
+		am, db, s := raceTestManagerAndDB(t)
 		srv := httptest.NewServer(raceMux(am))
 		client := srv.Client()
 
@@ -146,7 +131,7 @@ func TestPinsA14_UpdateAssetCanWriteIntoAnAlreadyDeletedRow(t *testing.T) {
 				Name    string
 				Deleted bool
 			}
-			if err := db.Table(tables.Assets).Select("name, deleted").Where("id = ?", asset.ID).Scan(&row).Error; err != nil {
+			if err := db.Table(tableFor(t, s, "asset")).Select("name, deleted").Where("id = ?", asset.ID).Scan(&row).Error; err != nil {
 				t.Fatalf("raw select: %v", err)
 			}
 			if row.Deleted && row.Name == "raced-update" {
@@ -177,7 +162,7 @@ func TestPinsA14_UpdateLocationCanWriteIntoAnAlreadyDeletedRow(t *testing.T) {
 	writtenIntoDeletedRow := 0
 
 	for i := 0; i < iterations; i++ {
-		am, db, tables := raceTestManagerAndDB(t)
+		am, db, s := raceTestManagerAndDB(t)
 		srv := httptest.NewServer(raceMux(am))
 		client := srv.Client()
 
@@ -209,7 +194,7 @@ func TestPinsA14_UpdateLocationCanWriteIntoAnAlreadyDeletedRow(t *testing.T) {
 				Name    string
 				Deleted bool
 			}
-			if err := db.Table(tables.Locations).Select("name, deleted").Where("id = ?", loc.ID).Scan(&row).Error; err != nil {
+			if err := db.Table(tableFor(t, s, "location")).Select("name, deleted").Where("id = ?", loc.ID).Scan(&row).Error; err != nil {
 				t.Fatalf("raw select: %v", err)
 			}
 			if row.Deleted && row.Name == "raced-update" {

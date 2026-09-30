@@ -130,10 +130,14 @@ Named here so the refactor cannot quietly drop them.
   the domain type. `specstore`'s nullable handling replaces
   `StringToNullable`/`nullableToString`; `nullable_test.go` in shared is the
   reference for what it does with an absent value.
-- **`Asset.AttributesJSON` should become a declared `json` field**, which is
-  `jsonb` on Postgres and text on SQLite. That is requirements decision #12's
-  deferred promotion arriving for free, and it is the one place the
-  conversion improves on today's shape rather than reproducing it.
+- **`Asset.AttributesJSON` stays a declared `text` field.** The first draft
+  of this audit said to promote it to `json` and take requirements decision
+  #12's deferred jsonb upgrade for free. That was wrong on closer reading:
+  nothing validates the field today, so an arbitrary non-JSON string is
+  storable, and `jsonb` would start refusing writes that succeed now —
+  a behaviour change smuggled into a storage refactor, which is exactly what
+  this repo's `CLAUDE.md` warns against. Filed as **A22** with the safe
+  order: declare `matches: "json_object"` first, then change the type.
 - **Every sentinel in `errors.go` needs a status in `operations.json`'s
   `errors` map.** There are fourteen. An unmapped one is redacted to a 500
   with `"internal error"` — catalog's CAT7. Transcribe the deleted handlers'

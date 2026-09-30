@@ -21,109 +21,165 @@ so it can *later* absorb the party's existing merchandise domain
 the `mwanachama` repo's documentation set) without a schema rewrite — that
 migration is not in scope yet.
 
-**Storage moved from entitygraph to GORM, 2026-09-04** — the same day and
-for the same reason as `mwanachama-backend-actor`'s migration (the org
-moved away from entitygraph's generic entity/relationship graph engine in
-favor of fixed Go structs mapped to plain relational tables), and this
-repo mirrored that migration's shape deliberately: `AssetManager`'s method
-set is unchanged; only `NewAssetManager`'s constructor and everything
-behind it changed. See `documentation/3. implementation/todo_done.md`'s A10
-for the full record and `doc.go` for the file layout. Highlights:
+## The rule that matters most: this module names no domain
 
-- **Domain types and GORM plumbing each live in their own subpackage**,
-  same split as actor: `models/` (`Location`, `Asset`, `Movement`, `Hold`,
-  one file per type) and `gormstore/` (row structs, `*ToRow`/`*FromRow`
-  converters, `Migrate`), one file per entity. No re-export shim in the
-  root package — `AssetManager`'s methods spell these types as
-  `models.Location` etc. directly, same call actor made for the same
-  reason (the type set is small and stable; callers pay a small coupling
-  cost instead of an alias layer). Not yet imported by any caller, so this
-  interface-shape break costs nothing today.
-- **Dropped multi-tenancy**, superseding requirements.md decision #4:
-  entitygraph scoped every vertex by `AgencyID` for free; actor's GORM
-  migration dropped that scoping outright rather than re-plumbing it as a
-  column, and this repo made the identical call for consistency — no
-  `AssetManager` method takes a tenant-scoping argument. Revisit if a real
-  multi-tenant caller shows up; re-adding it means a column plus a `WHERE`
-  clause on every query, not a redesign.
-- **`Location`'s `child_of` graph edge and its `parent_location_id`
-  denormalized property collapsed into one plain `parent_location_id`
-  column** (nullable — `gormstore.StringToNullable`/`nullableToString`
-  mirror actor's `GroupRow.ParentID` pattern exactly). A real relational
-  table needs only the one; `RelLabelChildOf`/`RelLabelHasChildLocation`
-  and the old `schema.go` are gone. `ListDescendantLocations` now walks
-  `parent_location_id` with a Go BFS (an in-memory child index, `visited`
-  guard against a corrupted cycle) rather than the old edge-walking BFS —
-  requirements.md decision #6 named a recursive CTE as the eventual shape,
-  and this repo could now write one against the real column, but per
-  actor's identical judgment call on `MoveGroup`'s cycle check, that's out
-  of scope for a storage-engine swap. Revisit if a deployment's location
-  count ever makes the Go walk a real cost.
-- **`Asset.SerialTag` uniqueness gained a real DB-level guard**:
-  `gormstore.Migrate`'s `syncSerialTagUniqueIndex` adds a partial unique
-  index (`WHERE deleted = false AND serial_tag <> ''`) behind
-  `CreateAsset`'s existing pre-check query — the entitygraph version only
-  had the pre-check, which two concurrent creates could both pass before
-  either committed.
-- **`Asset.AttributesJSON` stays a plain JSON-encoded string column**, not
-  promoted to GORM JSONB the way actor's `Attributes` was — requirements.md
-  decision #12 explicitly left that promotion for later, not a blocker on
-  today's shape. Don't conflate "GORM makes JSONB available" with "this is
-  now the time to promote it."
-- **Soft-delete parity**: `LocationRow`/`AssetRow` gained an explicit
-  `Deleted bool` column with `WHERE deleted = false` on every Get/List,
-  reproducing entitygraph's implicit soft-delete filtering now that this
-  repo owns the table directly. `MovementRow`/`HoldRow` have no such
-  column — Movement is append-only and Hold has no delete operation, so
-  neither needed one before and neither needs one now.
+**A word that means something in one domain and nothing in another does not
+belong in this module.** "Pallet" fails it — a household has belongings.
+"Asset" passes it.
 
-Files: `doc.go` (package doc + layout), `tables.go` (`TableNames`/
-`DefaultTableNames`/`Migrate` wrappers), `errors.go` (sentinel errors,
-unchanged by the storage swap), `asset_manager.go` (the `AssetManager`
-interface + `assetManager` struct + constructor), `location.go`,
-`asset.go`, `movement.go`, `hold.go`, `hold_watchdog.go`. `models/` and
-`gormstore/` as described above. `routes/` (added 2026-09-04, see below)
-holds this repo's HTTP surface: `doc.go`, `wire.go`, `routes.go`, and one
-file per aggregate (`location.go`/`asset.go`/`movement.go`/`hold.go`).
+It was written for warehouses and must run a household inventory or a
+livestock register without a line changing. `domain_agnostic_test.go`
+enforces it over four things: identifiers in `models/`, `routes/` and the
+root package; every **stored enum value**; the blueprint's roles, fields and
+declared values; and the route table's **action ids and paths**. The last
+two exist because a stored value and a published address both outlive a
+rename, which is the worst version of this failure.
 
-Tests: `testdb_test.go` (`newTestManager` — in-memory sqlite via
-`glebarez/sqlite`, migrated through `Migrate` the same way a real
-deployment would, mirroring actor's `testdb_test.go`), `location_test.go`/
-`asset_test.go`/`movement_test.go`/`hold_test.go` against that manager, and
-`postgres_integration_test.go` (opens `POSTGRES_URL` through
-`gorm.io/driver/postgres`, skipped when unset).
+Unlike catalog, nothing here had to be renamed to pass — Asset, Location,
+Movement, Hold, Category, SerialTag and every stored value already read the
+same to a warehouse, a household and a livestock keeper.
 
-**HTTP surface added 2026-09-04**, superseding decision #10 ("no
-HTTP/gRPC layer of its own") — the user asked for it explicitly right
-after A10's storage swap, mirroring `mwanachama-backend-actor/routes`'s
-shape and conventions: `routes/` package, `Route`/`Route.Pattern`,
-`LocationRoutes`/`AssetRoutes`/`MovementRoutes`/`HoldRoutes` + a `Routes`
-aggregator, decode-call-encode handlers with no caller-identity gate of
-their own (a mounting process wraps the returned `http.HandlerFunc` for
-auth). No `ResourceNames` override, unlike actor — actor's exists only
-because Group is renamed "chapters" by its gateway, and this repo has no
-equivalent org-configurable-noun precedent, so routes address fixed nouns
-("locations"/"assets"/"movements"/"holds") directly. The bare-package
-import path (`NewAssetManager` with no HTTP dependency) is unchanged and
-still works — `routes/` is additive, not a replacement. Full record:
-`documentation/3. implementation/todo_done.md`'s A11.
+## Objects are declared, not written
 
-The AssetManager Go API itself is still importable without any HTTP layer
-at all, the same shape `mwanachama-backend-taskmanager` has. Actor identity
-is decided too (#11): `performed_by`/`placed_by` are required,
-caller-supplied strings, validated non-empty but never interpreted — no
-modelled Actor type, no auth of any kind anywhere in this repo, including
-`routes/` — a route built from this package still needs an auth/capability
-gate wrapped around it by whatever mounts it.
+**Converted to the declared-domain standard 2026-09-30 (A16–A21)**, the
+shape `mwanachama-backend-catalog` sets and
+`developer/documentation/2. design/architecture-spec-driven-modules.md`
+decided. Before it, storage was `gormstore/`'s five row structs and
+`AutoMigrate`; now the tables come from JSON.
 
-**Verification default**: `go test ./...` (sqlite-backed) is the expected
-way to verify a change here, not the Postgres integration suite against a
-shared container. `postgres_integration_test.go` exists for real
-Postgres-wiring coverage sqlite can't fully stand in for, but per
-`todo_done.md`'s A8 note, don't reach for a shared `mwanachama-test-pg`-style
-container to run it without being asked — a parallel session got
-corrected for exactly that ad hoc pattern the same day this repo was
-built. See [[feedback_use_memory_backend_for_tests]].
+- **`assetmanager.blueprint.json`** — the module's five objects, declared
+  once. Embedded and reached through `Blueprint()`, `LoadSpec(path)` and
+  `ParseSpec(raw)`. Load a domain spec through those, never through
+  `spec.Load`, or its roled objects arrive with no fields.
+- **`spec/examples/warehouse.assetmanager.json`** and
+  **`household.assetmanager.json`** — the same module under two domains,
+  chosen as the two furthest apart in `requirements.md`'s problem statement.
+  `TestTwoDomainsCoexist` migrates both into one database. Neither is
+  provisioned anywhere, so a shipped example is never also production config
+  (catalog's CAT6).
+- **A domain names objects; it does not re-declare them.** Its spec supplies
+  `instance`, the name and table each role lands in, its own indexes and a
+  **default** on a declared field — nothing else. `household` sets a default
+  on `kind` and declares `warranty`, an object of its own with no role,
+  which is how a domain adds a field the module does not have.
+- `mwanachama-backend-shared`'s `spec` is the loader and migrator,
+  `specstore` the codec, `dispatch` the route builder.
+
+**A column is found by field name, never by json tag**, and **every declared
+column is written on every write** — a map missing a key means "leave it
+alone" to an update, so omitting empty values would make clearing a field
+impossible. **The spec and the types are checked against each other in
+`NewAssetManager`**, so a declared column with no field fails at
+construction rather than dropping a value on every write.
+
+**A table is `<instance>_hashOf(<mount>)_hashOf(<module>_<object>)`** — only
+the instance stays readable. Assert on `spec.RawNameFor`, never on a
+physical name literal, and exclude `%_spec_table_names` from anything that
+counts tables. See
+[declared-domains.md](../mwanachama-backend-shared/documentation/2.%20design/declared-domains.md).
+
+**`asset.serial_tag`'s uniqueness needed the engine widened.** The index is
+`unique (serial_tag) where deleted = false and serial_tag <> ''`, and
+`spec.Index` could express only the first condition. Every fungible asset
+has an empty tag by definition, so an index without the second collides the
+second untagged row with the first. `Index.Where` landed in shared as
+**S33**; `cmd/ddl` prints the result.
+
+## Rules are declared too, where they can be
+
+`validate.go` reads `required`, an enum's `values` and `matches` off the
+spec; `patterns.go` is the registry (`rfc3339`), and a spec naming a pattern
+nobody supplies is an error rather than a rule that quietly never runs.
+`Check(spec, role, value)` is the same validation without a database.
+
+`check` skips the fields the **store** decides — `id`, `code`, the
+timestamps, a hold's `status` — so a caller is held only to what a caller
+supplies. That set is `storeOwned`.
+
+**What stays in Go is what a spec cannot say**, each with the type it is
+about: the four postable movement shapes, a serialized asset needing a tag,
+a positive quantity, an expiry in the future, and
+`models.HoldStatus.CanTransitionTo`.
+
+`TestVocabularyMatchesTheBlueprint` holds `models/`'s constants and the
+blueprint's declared `values` to each other in **both** directions.
+
+## Routes are declared too
+
+`assetmanager.operations.json` holds all 22 addresses and maps every
+sentinel to a status. `AnonymousActions` is the gate boundary and is
+**empty** — this module has no auth model, so every address arrives gated
+and a mount names what it wants to open. Full record:
+[documentation/2. design/routes.md](documentation/2.%20design/routes.md).
+
+## What is superseded
+
+- **`gormstore/`** — **deleted 2026-09-30 (A20)**. Five row structs, their
+  `*ToRow`/`*FromRow` converters, `AutoMigrate`-based `Migrate`,
+  `DefaultTableNames` and `syncSerialTagUniqueIndex`, replaced by the
+  blueprint and `spec.Migrate`. Root `tables.go` and its
+  `TableNames`/`DefaultTableNames`/`Migrate` re-export went with it.
+  `NewAssetManager(db, *spec.Spec)` is the constructor now.
+- **`routes/asset.go`, `hold.go`, `location.go`, `movement.go`** — the
+  hand-written handlers, **deleted 2026-09-30 (A17)**. The four builders
+  `LocationRoutes`/`AssetRoutes`/`MovementRoutes`/`HoldRoutes` went too: the
+  gate boundary they encoded is `AnonymousActions` now, so a mount names
+  actions rather than this module's Go identifiers.
+- **`models/`'s per-field doc comments** — gone (A18). They were a
+  hand-rewritten copy of what the blueprint's `description` now owns, and
+  `models/` went from 270 lines to 91. What remains is the types, the
+  constants Go compares against, and `CanTransitionTo`.
+- **The `models/`+`gormstore/` split and `NewXManager(db, tables)`** that
+  this file's Conventions section pointed at `mwanachama-backend-actor` for.
+  That pointer recorded the org convention of 2026-09-04 and is superseded
+  by the standard; actor is on the same migration path.
+
+`NextCode` did **not** go with `gormstore/` — it moved to `code.go`
+unchanged. A counter is not something a spec can declare, and **A15 is an
+open bug filed against exactly that function**, so fixing it inside a
+refactor is what would have hidden it.
+
+## Behaviours to preserve
+
+- **A caller-supplied id is never honoured** on any create. The server mints
+  it (A12), and the two PATCH addresses bind the id from the path, applied
+  after the body is decoded.
+- **`Asset.TrackingMode` is immutable after creation.** Changing it would
+  silently invalidate every prior Movement's balance semantics.
+- **A balance is never stored**, always folded from the ledger. A reversal
+  is a new entry mirroring an old one, with origin and destination swapped
+  so the pair cancels; the original is never edited or deleted.
+- **A reservation is committed at most once.** Whatever is not taken is
+  released in the same call — there is no `partially_committed` →
+  `committed` path.
+- **`ListLocations{RootOnly}` filters on `parent_location_id = ''`**, not
+  `IS NULL`. The column is a plain string now; the domain type always
+  spelled a root as `""` and the `*string` was only a row-boundary dance.
+- **A15, A13 and A14 still reproduce.** The conversion was checked against
+  them at every step rather than trusted: A13 35/40, A14 196/200 and
+  199/200. If one of those pinning tests goes green, investigate — do not
+  update the test.
+
+**Storage moved from entitygraph to GORM, 2026-09-04** (A10), which is the
+step that made the above possible; the declared-domain move is the step
+after. That migration also **dropped multi-tenancy**, superseding
+requirements.md decision #4, and collapsed `Location`'s `child_of` edge into
+a plain `parent_location_id` column. `spec`'s `<instance>_…` naming is
+per-deployment mount scoping, not per-request tenancy, so it does not reopen
+#4 — no `AssetManager` method takes a tenant-scoping argument.
+
+**HTTP surface added 2026-09-04** (A11), superseding decision #10 ("no
+HTTP/gRPC layer of its own") at the user's explicit request. The bare-package
+import path is unchanged and still works — `routes/` is additive.
+
+**Verification default**: `go test ./...` (sqlite via `glebarez/sqlite`).
+The Postgres behaviours SQLite cannot stand in for live in
+`postgres_integration_test.go` (`//go:build integration`, gated on
+`POSTGRES_URL`, run by `make test-pg`), which is **not** part of
+`go test ./...`. The build tag was added 2026-09-30 (A21) — before that
+there was no build tag in the repo at all, so `make test-pg` selected
+nothing and ran exactly what `make test` ran. See
+[[feedback_use_memory_backend_for_tests]].
 
 ## Open questions
 
@@ -134,11 +190,15 @@ the #1/#4 supersessions the 2026-09-04 GORM migration recorded above).
 
 - Four-phase `documentation/` layout — see
   [documentation/README.md](documentation/README.md).
-- Before adding new persistence code, read
-  `mwanachama-backend-actor`'s `gormstore/` package and `user.go`'s
-  `UserManager` interface as the reference shape this repo's GORM layer
-  was ported from — same `models/`+`gormstore/` split, same
-  `NewXManager(db, tables)` constructor shape.
+- `mwanachama-backend-catalog` is the reference for this repo's shape, not
+  `mwanachama-backend-actor` any more. Read its `CLAUDE.md` and `doc.go`
+  before adding persistence code.
+- No Go file over 300 lines; split by responsibility.
+- There are no hand-written route builders left to name: an address is an
+  entry in `assetmanager.operations.json`, and adding one is an edit to that
+  file rather than a new Go function.
+- This module has **no auth model**: a route still needs a capability gate
+  wrapped around it by whatever mounts it.
 
 ## Code comments
 

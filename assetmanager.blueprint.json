@@ -1,0 +1,335 @@
+{
+  "module": "assetmanager",
+  "objects": [
+    {
+      "role": "location",
+      "description": "A place a tracked thing can be — a warehouse bin, a household room, a pasture. Nested to unbounded depth through parent_location_id; nothing constrains what kind may nest under what.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "description": "Storage key, opaque to callers. Server-minted; a caller-supplied id is never honoured.",
+          "primary": true
+        },
+        {
+          "name": "code",
+          "type": "string",
+          "description": "Stable human-readable identifier assigned once at creation, e.g. \"L-1\". Unlike name it never changes on update, so it is the one an operator can write on a label.",
+          "required": true,
+          "unique": true,
+          "immutable": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Short human-readable label, e.g. \"Bin 12\" or \"Pantry shelf\".",
+          "required": true
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "description": "Open-ended and descriptive only — \"warehouse\", \"aisle\", \"bin\", \"room\", \"shelf\", \"pasture\". Nothing enforces a vocabulary here, because every domain has its own."
+        },
+        {
+          "name": "parent_location_id",
+          "type": "string",
+          "description": "The enclosing location. Empty for a root location, which is how a tree is told from a forest."
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of creation.",
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of the last update.",
+          "required": true
+        },
+        {
+          "name": "deleted",
+          "type": "bool",
+          "description": "Soft-delete marker. Every read that lists rather than naming one row by id filters it out."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "parent",
+          "description": "Walks the tree: lists one location's direct children, which the descendant walk repeats per level.",
+          "fields": ["parent_location_id"],
+          "not_deleted": true
+        }
+      ]
+    },
+    {
+      "role": "asset",
+      "description": "A trackable thing — either one physical unit, identified by its own tag, or a type tracked as a quantity. Which of the two it is is fixed at creation, because every movement already recorded against it means something different under the other reading.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "description": "Storage key, opaque to callers. Server-minted; a caller-supplied id is never honoured.",
+          "primary": true
+        },
+        {
+          "name": "code",
+          "type": "string",
+          "description": "Stable human-readable identifier assigned once at creation, e.g. \"A-1\". Unlike name it never changes on update.",
+          "required": true,
+          "unique": true,
+          "immutable": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Short human-readable label, e.g. \"T-shirt, size M\" or \"Bessie\".",
+          "required": true
+        },
+        {
+          "name": "tracking_mode",
+          "type": "enum",
+          "description": "How this row's on-hand amount is read. \"serialized\" means the row is one physical unit, so its balance anywhere is 0 or 1; \"fungible\" means the row is a type and its quantity at a place is folded from the ledger. Immutable after creation.",
+          "required": true,
+          "immutable": true,
+          "values": ["serialized", "fungible"]
+        },
+        {
+          "name": "serial_tag",
+          "type": "string",
+          "description": "The unique tag or serial carried by a serialized thing — an ear tag, an equipment serial. Empty for a fungible one, which is why its uniqueness index has to exclude the empty value."
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "description": "Free-form grouping label, e.g. \"livestock\", \"grocery\", \"electronics\". Not constrained to a vocabulary."
+        },
+        {
+          "name": "attributes_json",
+          "type": "text",
+          "description": "A JSON-encoded object of whatever else this domain records about the thing — breed, warranty expiry, barcode. Stored as text rather than as a document column on purpose; promoting it is its own decision, not a side effect of a storage change."
+        },
+        {
+          "name": "location_id",
+          "type": "string",
+          "description": "Where the thing was last seen, maintained by the ledger rather than by a caller. A convenience only: the real balance at any place always comes from folding movements, never from this."
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of creation.",
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of the last update.",
+          "required": true
+        },
+        {
+          "name": "deleted",
+          "type": "bool",
+          "description": "Soft-delete marker. Every read that lists rather than naming one row by id filters it out."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "serial_tag",
+          "description": "Stops two live things claiming the same tag. Narrowed to non-empty tags because every fungible row leaves it blank, and blank is a value like any other to a unique index.",
+          "fields": ["serial_tag"],
+          "unique": true,
+          "not_deleted": true,
+          "where": [{ "field": "serial_tag", "op": "not_empty" }]
+        },
+        {
+          "name": "location",
+          "description": "Lists what was last seen at one place.",
+          "fields": ["location_id"],
+          "not_deleted": true
+        }
+      ]
+    },
+    {
+      "role": "movement",
+      "description": "One append-only ledger entry. The balance at any thing-and-place pair is the fold of every entry affecting it, never a stored running total, so a correction is a new entry mirroring an old one rather than an edit to it.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "description": "Storage key, opaque to callers. Server-minted; a caller-supplied id is never honoured.",
+          "primary": true
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "description": "The thing this entry moves.",
+          "required": true
+        },
+        {
+          "name": "kind",
+          "type": "enum",
+          "description": "What sort of entry this is. \"arrived\" enters from outside and names no origin; \"transferred\" moves between two places; \"departed\" leaves and names no destination; \"adjusted\" is a counted correction with no physical move, and the only kind whose quantity may be negative; \"reversed\" mirrors a prior entry.",
+          "required": true,
+          "values": ["arrived", "transferred", "departed", "adjusted", "reversed"]
+        },
+        {
+          "name": "quantity",
+          "type": "int",
+          "description": "How much this entry applies. Positive for every kind but \"adjusted\", which may be negative for a downward correction. Direction is otherwise carried by which of the two places is named, not by the sign."
+        },
+        {
+          "name": "from_location_id",
+          "type": "string",
+          "description": "Where this entry originated. Empty when the thing arrived from outside."
+        },
+        {
+          "name": "to_location_id",
+          "type": "string",
+          "description": "Where this entry ends up. Empty when the thing departed."
+        },
+        {
+          "name": "performed_by",
+          "type": "string",
+          "description": "Who recorded this entry, as an id this module never interprets. Required because an unattributed ledger entry is the gap a ledger exists to close.",
+          "required": true
+        },
+        {
+          "name": "reverses_movement_id",
+          "type": "string",
+          "description": "The entry this one mirrors, for kind \"reversed\". Empty otherwise. The mirrored entry is never edited or deleted."
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "description": "Free-form reason, e.g. what a count variance turned out to be."
+        },
+        {
+          "name": "occurred_at",
+          "type": "timestamp",
+          "description": "When the move actually happened, which differs from created_at for an entry queued offline and posted on reconnect.",
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of when the entry was posted.",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "asset",
+          "description": "Folds one thing's ledger, which every balance read does.",
+          "fields": ["asset_id"]
+        },
+        {
+          "name": "reverses",
+          "description": "Answers whether an entry has already been mirrored, which is what makes a reversal at-most-once.",
+          "fields": ["reverses_movement_id"],
+          "where": [{ "field": "reverses_movement_id", "op": "not_empty" }]
+        }
+      ]
+    },
+    {
+      "role": "hold",
+      "description": "A reservation against a thing — quantity set aside before it actually moves, for a checkout or an order pick. Expires on its own if never committed, and supports committing less than was held, with the remainder given back.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "description": "Storage key, opaque to callers. Server-minted; a caller-supplied id is never honoured.",
+          "primary": true
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "description": "The thing this reservation is against.",
+          "required": true
+        },
+        {
+          "name": "location_id",
+          "type": "string",
+          "description": "Where the quantity is reserved. Required, because what is available is only ever meaningful against one place.",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "enum",
+          "description": "Where the reservation is in its life. It starts \"reserved\" and every move out of that is terminal: fully \"committed\", \"released\" with nothing taken, or \"partially_committed\" with the remainder given back.",
+          "required": true,
+          "values": ["reserved", "committed", "released", "partially_committed"]
+        },
+        {
+          "name": "quantity",
+          "type": "int",
+          "description": "How much was originally set aside."
+        },
+        {
+          "name": "committed_quantity",
+          "type": "int",
+          "description": "How much of that was actually taken. Never more than quantity."
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp",
+          "description": "When an uncommitted reservation is released without anyone asking. Read by the watchdog sweep.",
+          "required": true,
+          "matches": "rfc3339"
+        },
+        {
+          "name": "placed_by",
+          "type": "string",
+          "description": "Who placed the reservation, as an id this module never interprets. Required for the same reason a ledger entry names who recorded it.",
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of creation.",
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "description": "RFC 3339 timestamp of the last update.",
+          "required": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "asset",
+          "description": "Finds the open reservations against one thing, which both the availability sum and the delete refusal need.",
+          "fields": ["asset_id"]
+        },
+        {
+          "name": "location",
+          "description": "Finds the reservations at one place.",
+          "fields": ["location_id"]
+        },
+        {
+          "name": "expiry",
+          "description": "The watchdog's sweep for reservations past their time.",
+          "fields": ["status", "expires_at"]
+        }
+      ]
+    },
+    {
+      "role": "code_sequence",
+      "description": "The counter behind each kind of row's stable human-readable code. One row per kind of thing being numbered, holding the number to mint next.",
+      "fields": [
+        {
+          "name": "entity_type",
+          "type": "string",
+          "description": "Which kind of row this counter numbers, as the module's own role word.",
+          "primary": true
+        },
+        {
+          "name": "next_number",
+          "type": "int",
+          "description": "The number the next minted code will carry.",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

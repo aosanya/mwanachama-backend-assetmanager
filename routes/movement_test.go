@@ -9,14 +9,13 @@ import (
 	"testing"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func TestPostMovement(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
 	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
-	handler := routes.PostMovement(am)
+	handler := handlerFor(t, am, "assetmanager.movement.post")
 
 	body := `{"asset_id":"` + a.ID + `","kind":"arrived","quantity":100,"to_location_id":"` + loc.ID + `","performed_by":"` + testActor + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/movements", strings.NewReader(body))
@@ -38,7 +37,7 @@ func TestPostMovement(t *testing.T) {
 func TestPostMovement_InvalidShape(t *testing.T) {
 	am := newTestManager(t)
 	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
-	handler := routes.PostMovement(am)
+	handler := handlerFor(t, am, "assetmanager.movement.post")
 
 	body := `{"asset_id":"` + a.ID + `","kind":"arrived","quantity":0,"performed_by":"` + testActor + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/movements", strings.NewReader(body))
@@ -53,7 +52,7 @@ func TestPostMovement_InvalidShape(t *testing.T) {
 func TestPostMovement_AssetNotFound(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	handler := routes.PostMovement(am)
+	handler := handlerFor(t, am, "assetmanager.movement.post")
 
 	body := `{"asset_id":"nope","kind":"arrived","quantity":1,"to_location_id":"` + loc.ID + `","performed_by":"` + testActor + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/movements", strings.NewReader(body))
@@ -67,7 +66,7 @@ func TestPostMovement_AssetNotFound(t *testing.T) {
 
 func TestGetMovement_NotFound(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.GetMovement(am)
+	handler := handlerFor(t, am, "assetmanager.movement.read")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/movements/nope", nil), "movementID", "nope")
 	rec := httptest.NewRecorder()
@@ -87,7 +86,7 @@ func TestListMovements_FilterByAssetID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	handler := routes.ListMovements(am)
+	handler := handlerFor(t, am, "assetmanager.movement.list")
 
 	req := httptest.NewRequest(http.MethodGet, "/movements?asset_id="+a.ID, nil)
 	rec := httptest.NewRecorder()
@@ -113,7 +112,7 @@ func TestReverseMovement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	handler := routes.ReverseMovement(am)
+	handler := handlerFor(t, am, "assetmanager.movement.reverse")
 
 	body := `{"performed_by":"` + testActor + `","note":"counted wrong"}`
 	req := withPathValue(httptest.NewRequest(http.MethodPost, "/movements/"+mv.ID+"/reverse", strings.NewReader(body)), "movementID", mv.ID)
@@ -140,7 +139,7 @@ func TestReverseMovement_MissingPerformedBy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	handler := routes.ReverseMovement(am)
+	handler := handlerFor(t, am, "assetmanager.movement.reverse")
 
 	req := withPathValue(httptest.NewRequest(http.MethodPost, "/movements/"+mv.ID+"/reverse", strings.NewReader(`{}`)), "movementID", mv.ID)
 	rec := httptest.NewRecorder()

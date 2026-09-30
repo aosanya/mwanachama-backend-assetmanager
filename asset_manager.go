@@ -74,49 +74,31 @@ const (
 // LocationFilter scopes a [AssetManager.ListLocations] query. Zero-value
 // fields are ignored (no filtering applied for that field).
 type LocationFilter struct {
-	// ParentLocationID restricts results to direct children of this
-	// location. Ignored when RootOnly is true.
-	ParentLocationID string
-
-	// RootOnly restricts results to locations with no parent.
-	RootOnly bool
+	ParentLocationID string `query:"parent_location_id"`
+	RootOnly         bool   `query:"root_only"`
 }
 
 // AssetFilter scopes a [AssetManager.ListAssets] query. Zero-value fields
 // are ignored (no filtering applied for that field).
 type AssetFilter struct {
-	// Category restricts results to this exact category.
-	Category string
-
-	// TrackingMode restricts results to this tracking mode.
-	TrackingMode models.AssetTrackingMode
-
-	// LocationID restricts results to assets currently denormalized to
-	// this location.
-	LocationID string
+	Category     string                   `query:"category"`
+	TrackingMode models.AssetTrackingMode `query:"tracking_mode"`
+	LocationID   string                   `query:"location_id"`
 }
 
 // MovementFilter scopes a [AssetManager.ListMovements] query. Zero-value
 // fields are ignored (no filtering applied for that field).
 type MovementFilter struct {
-	// AssetID restricts results to movements affecting this asset.
-	AssetID string
-
-	// Kind restricts results to this movement kind.
-	Kind models.MovementKind
+	AssetID string              `query:"asset_id"`
+	Kind    models.MovementKind `query:"kind"`
 }
 
 // HoldFilter scopes a [AssetManager.ListHolds] query. Zero-value fields are
 // ignored (no filtering applied for that field).
 type HoldFilter struct {
-	// AssetID restricts results to holds against this asset.
-	AssetID string
-
-	// LocationID restricts results to holds at this location.
-	LocationID string
-
-	// Status restricts results to this hold status.
-	Status models.HoldStatus
+	AssetID    string            `query:"asset_id"`
+	LocationID string            `query:"location_id"`
+	Status     models.HoldStatus `query:"status"`
 }
 
 // AssetManager is the primary interface for asset/inventory lifecycle

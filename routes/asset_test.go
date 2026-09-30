@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func newAsset(t *testing.T, am mwanachamaassetmanager.AssetManager, name string, mode mwanachamaassetmanager.AssetTrackingMode) mwanachamaassetmanager.Asset {
@@ -23,7 +22,7 @@ func newAsset(t *testing.T, am mwanachamaassetmanager.AssetManager, name string,
 
 func TestCreateAsset(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.CreateAsset(am)
+	handler := handlerFor(t, am, "assetmanager.asset.create")
 
 	body := `{"name":"Rice, 50kg bag","tracking_mode":"fungible"}`
 	req := httptest.NewRequest(http.MethodPost, "/assets", strings.NewReader(body))
@@ -44,7 +43,7 @@ func TestCreateAsset(t *testing.T) {
 
 func TestCreateAsset_InvalidTrackingMode(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.CreateAsset(am)
+	handler := handlerFor(t, am, "assetmanager.asset.create")
 
 	req := httptest.NewRequest(http.MethodPost, "/assets", strings.NewReader(`{"name":"Mystery","tracking_mode":"bogus"}`))
 	rec := httptest.NewRecorder()
@@ -57,7 +56,7 @@ func TestCreateAsset_InvalidTrackingMode(t *testing.T) {
 
 func TestGetAsset_NotFound(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.GetAsset(am)
+	handler := handlerFor(t, am, "assetmanager.asset.read")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/assets/nope", nil), "assetID", "nope")
 	rec := httptest.NewRecorder()
@@ -71,7 +70,7 @@ func TestGetAsset_NotFound(t *testing.T) {
 func TestUpdateAsset(t *testing.T) {
 	am := newTestManager(t)
 	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
-	handler := routes.UpdateAsset(am)
+	handler := handlerFor(t, am, "assetmanager.asset.update")
 
 	body := `{"name":"Rice, 25kg bag","category":"grocery"}`
 	req := withPathValue(httptest.NewRequest(http.MethodPatch, "/assets/"+a.ID, strings.NewReader(body)), "assetID", a.ID)
@@ -91,7 +90,7 @@ func TestUpdateAsset(t *testing.T) {
 func TestDeleteAsset(t *testing.T) {
 	am := newTestManager(t)
 	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
-	handler := routes.DeleteAsset(am)
+	handler := handlerFor(t, am, "assetmanager.asset.delete")
 
 	req := withPathValue(httptest.NewRequest(http.MethodDelete, "/assets/"+a.ID, nil), "assetID", a.ID)
 	rec := httptest.NewRecorder()
@@ -110,7 +109,7 @@ func TestListAssets_FilterByCategory(t *testing.T) {
 	if _, err := am.CreateAsset(context.Background(), mwanachamaassetmanager.Asset{Name: "Bessie", TrackingMode: mwanachamaassetmanager.AssetTrackingModeSerialized, SerialTag: "COW-1", Category: "livestock"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	handler := routes.ListAssets(am)
+	handler := handlerFor(t, am, "assetmanager.asset.list")
 
 	req := httptest.NewRequest(http.MethodGet, "/assets?category=grocery", nil)
 	rec := httptest.NewRecorder()
@@ -135,7 +134,7 @@ func TestGetAssetBalance(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	handler := routes.GetAssetBalance(am)
+	handler := handlerFor(t, am, "assetmanager.asset.balance")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/assets/"+a.ID+"/balance?location_id="+loc.ID, nil), "assetID", a.ID)
 	rec := httptest.NewRecorder()
@@ -154,7 +153,7 @@ func TestGetAssetBalance(t *testing.T) {
 func TestGetAssetBalance_MissingLocationID(t *testing.T) {
 	am := newTestManager(t)
 	a := newAsset(t, am, "Rice", mwanachamaassetmanager.AssetTrackingModeFungible)
-	handler := routes.GetAssetBalance(am)
+	handler := handlerFor(t, am, "assetmanager.asset.balance")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/assets/"+a.ID+"/balance", nil), "assetID", a.ID)
 	rec := httptest.NewRecorder()

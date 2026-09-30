@@ -244,6 +244,9 @@ func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter)
 // original by construction — see ReverseMovement's swapped From/To). Never
 // a stored running total — always recomputed from the ledger.
 func (m *assetManager) GetAssetBalance(ctx context.Context, assetID, locationID string) (int64, error) {
+	if locationID == "" {
+		return 0, fmt.Errorf("%w: a balance is only meaningful at a named location", ErrInvalidAsset)
+	}
 	movements, err := m.ListMovements(ctx, MovementFilter{AssetID: assetID})
 	if err != nil {
 		return 0, fmt.Errorf("GetAssetBalance: %w", err)

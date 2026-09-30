@@ -24,7 +24,7 @@ import (
 func (m *assetManager) ListHoldsExpiredAsOf(ctx context.Context, cutoffRFC3339 string) ([]models.Hold, error) {
 	cutoff, err := time.Parse(time.RFC3339, cutoffRFC3339)
 	if err != nil {
-		return nil, fmt.Errorf("ListHoldsExpiredAsOf: cutoff must be RFC 3339: %w", err)
+		return nil, fmt.Errorf("%w: cutoff must be RFC 3339: %v", ErrInvalidHold, err)
 	}
 	open, err := m.ListHolds(ctx, HoldFilter{Status: models.HoldStatusReserved})
 	if err != nil {

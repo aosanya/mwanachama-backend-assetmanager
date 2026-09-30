@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func newTestManager(t *testing.T) mwanachamaassetmanager.AssetManager {
@@ -26,7 +25,7 @@ const testActor = "actor-1"
 
 func TestCreateLocation(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.CreateLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.create")
 
 	req := httptest.NewRequest(http.MethodPost, "/locations", strings.NewReader(`{"name":"Warehouse","kind":"warehouse"}`))
 	rec := httptest.NewRecorder()
@@ -46,7 +45,7 @@ func TestCreateLocation(t *testing.T) {
 
 func TestCreateLocation_MissingName(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.CreateLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.create")
 
 	req := httptest.NewRequest(http.MethodPost, "/locations", strings.NewReader(`{"kind":"bin"}`))
 	rec := httptest.NewRecorder()
@@ -69,7 +68,7 @@ func newLocation(t *testing.T, am mwanachamaassetmanager.AssetManager, name, par
 func TestGetLocation(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	handler := routes.GetLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.read")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/locations/"+loc.ID, nil), "locationID", loc.ID)
 	rec := httptest.NewRecorder()
@@ -82,7 +81,7 @@ func TestGetLocation(t *testing.T) {
 
 func TestGetLocation_NotFound(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.GetLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.read")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/locations/nope", nil), "locationID", "nope")
 	rec := httptest.NewRecorder()
@@ -96,7 +95,7 @@ func TestGetLocation_NotFound(t *testing.T) {
 func TestUpdateLocation(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Warehouse", "")
-	handler := routes.UpdateLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.update")
 
 	body := `{"name":"Main Warehouse","kind":"warehouse"}`
 	req := withPathValue(httptest.NewRequest(http.MethodPatch, "/locations/"+loc.ID, strings.NewReader(body)), "locationID", loc.ID)
@@ -116,7 +115,7 @@ func TestUpdateLocation(t *testing.T) {
 func TestDeleteLocation(t *testing.T) {
 	am := newTestManager(t)
 	loc := newLocation(t, am, "Empty Shelf", "")
-	handler := routes.DeleteLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.delete")
 
 	req := withPathValue(httptest.NewRequest(http.MethodDelete, "/locations/"+loc.ID, nil), "locationID", loc.ID)
 	rec := httptest.NewRecorder()
@@ -131,7 +130,7 @@ func TestDeleteLocation_NotEmpty(t *testing.T) {
 	am := newTestManager(t)
 	parent := newLocation(t, am, "Parent", "")
 	_ = newLocation(t, am, "Child", parent.ID)
-	handler := routes.DeleteLocation(am)
+	handler := handlerFor(t, am, "assetmanager.location.delete")
 
 	req := withPathValue(httptest.NewRequest(http.MethodDelete, "/locations/"+parent.ID, nil), "locationID", parent.ID)
 	rec := httptest.NewRecorder()
@@ -146,7 +145,7 @@ func TestListLocations_RootOnly(t *testing.T) {
 	am := newTestManager(t)
 	root := newLocation(t, am, "Root", "")
 	_ = newLocation(t, am, "Child", root.ID)
-	handler := routes.ListLocations(am)
+	handler := handlerFor(t, am, "assetmanager.location.list")
 
 	req := httptest.NewRequest(http.MethodGet, "/locations?root_only=true", nil)
 	rec := httptest.NewRecorder()
@@ -166,7 +165,7 @@ func TestListDescendantLocations(t *testing.T) {
 	am := newTestManager(t)
 	parent := newLocation(t, am, "Warehouse", "")
 	child := newLocation(t, am, "Bin", parent.ID)
-	handler := routes.ListDescendantLocations(am)
+	handler := handlerFor(t, am, "assetmanager.location.descendants")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/locations/"+parent.ID+"/descendants", nil), "locationID", parent.ID)
 	rec := httptest.NewRecorder()

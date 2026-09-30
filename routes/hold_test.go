@@ -10,7 +10,6 @@ import (
 	"time"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
-	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func futureRFC3339(t *testing.T) string {
@@ -27,7 +26,7 @@ func TestCreateHold(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	handler := routes.CreateHold(am)
+	handler := handlerFor(t, am, "assetmanager.hold.create")
 
 	body := `{"asset_id":"` + a.ID + `","location_id":"` + loc.ID + `","quantity":10,"expires_at":"` + futureRFC3339(t) + `","placed_by":"` + testActor + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/holds", strings.NewReader(body))
@@ -55,7 +54,7 @@ func TestCreateHold_InsufficientAvailable(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	handler := routes.CreateHold(am)
+	handler := handlerFor(t, am, "assetmanager.hold.create")
 
 	body := `{"asset_id":"` + a.ID + `","location_id":"` + loc.ID + `","quantity":10,"expires_at":"` + futureRFC3339(t) + `","placed_by":"` + testActor + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/holds", strings.NewReader(body))
@@ -69,7 +68,7 @@ func TestCreateHold_InsufficientAvailable(t *testing.T) {
 
 func TestGetHold_NotFound(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.GetHold(am)
+	handler := handlerFor(t, am, "assetmanager.hold.read")
 
 	req := withPathValue(httptest.NewRequest(http.MethodGet, "/holds/nope", nil), "holdID", "nope")
 	rec := httptest.NewRecorder()
@@ -95,7 +94,7 @@ func TestCommitHold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed CreateHold: %v", err)
 	}
-	handler := routes.CommitHold(am)
+	handler := handlerFor(t, am, "assetmanager.hold.commit")
 
 	body := `{"quantity":10,"kind":"departed","performed_by":"` + testActor + `"}`
 	req := withPathValue(httptest.NewRequest(http.MethodPost, "/holds/"+h.ID+"/commit", strings.NewReader(body)), "holdID", h.ID)
@@ -132,7 +131,7 @@ func TestReleaseHold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed CreateHold: %v", err)
 	}
-	handler := routes.ReleaseHold(am)
+	handler := handlerFor(t, am, "assetmanager.hold.release")
 
 	req := withPathValue(httptest.NewRequest(http.MethodPost, "/holds/"+h.ID+"/release", nil), "holdID", h.ID)
 	rec := httptest.NewRecorder()
@@ -162,7 +161,7 @@ func TestListHolds_FilterByStatus(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed CreateHold: %v", err)
 	}
-	handler := routes.ListHolds(am)
+	handler := handlerFor(t, am, "assetmanager.hold.list")
 
 	req := httptest.NewRequest(http.MethodGet, "/holds?status=reserved", nil)
 	rec := httptest.NewRecorder()
@@ -194,7 +193,7 @@ func TestListHoldsExpiredAsOf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed CreateHold: %v", err)
 	}
-	handler := routes.ListHoldsExpiredAsOf(am)
+	handler := handlerFor(t, am, "assetmanager.hold.expired")
 
 	cutoff := time.Now().UTC().Add(2 * time.Minute).Format(time.RFC3339)
 	req := httptest.NewRequest(http.MethodGet, "/holds/expired?cutoff="+cutoff, nil)
@@ -213,7 +212,7 @@ func TestListHoldsExpiredAsOf(t *testing.T) {
 
 func TestListHoldsExpiredAsOf_MissingCutoff(t *testing.T) {
 	am := newTestManager(t)
-	handler := routes.ListHoldsExpiredAsOf(am)
+	handler := handlerFor(t, am, "assetmanager.hold.expired")
 
 	req := httptest.NewRequest(http.MethodGet, "/holds/expired", nil)
 	rec := httptest.NewRecorder()

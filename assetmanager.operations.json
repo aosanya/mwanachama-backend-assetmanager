@@ -1,0 +1,196 @@
+{
+  "operations": {
+    "create_location": {
+      "method": "POST", "path": "/locations", "call": "CreateLocation", "action": "assetmanager.location.create",
+      "status": 201,
+      "title": "Create location",
+      "description": "Add a place things can be. Name it, optionally say what kind of place it is, and optionally nest it under one that already exists. The code is minted here and never changes afterwards.",
+      "args": [{"from": "body", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "list_locations": {
+      "method": "GET", "path": "/locations", "call": "ListLocations", "action": "assetmanager.location.list",
+      "title": "List locations",
+      "description": "List places, newest id last. Narrow to one place's direct children, or to the roots with no parent at all.",
+      "args": [{"from": "query", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "get_location": {
+      "method": "GET", "path": "/locations/{locationID}", "call": "GetLocation", "action": "assetmanager.location.read",
+      "title": "Read location",
+      "description": "Read one place. A deleted one reads as missing.",
+      "args": [{"from": "path", "as": "locationID", "description": "The place to read."}],
+      "returns": [{"body": true}]
+    },
+    "update_location": {
+      "method": "PATCH", "path": "/locations/{locationID}", "call": "UpdateLocation", "action": "assetmanager.location.update",
+      "title": "Update location",
+      "description": "Change a place's name or kind, or move it under a different parent. Moving it under itself or under one of its own descendants is refused, because that would make the tree a loop.",
+      "args": [{"from": "body", "whole": true},
+               {"from": "path", "as": "locationID", "into": "ID", "description": "The place to change. The address decides which, not the body."}],
+      "returns": [{"body": true}]
+    },
+    "delete_location": {
+      "method": "DELETE", "path": "/locations/{locationID}", "call": "DeleteLocation", "action": "assetmanager.location.delete",
+      "status": 204,
+      "title": "Delete location",
+      "description": "Soft-delete a place. Refused while it still has places nested under it or things recorded as being there.",
+      "args": [{"from": "path", "as": "locationID", "description": "The place to delete."}],
+      "returns": [{"body": true}]
+    },
+    "list_descendant_locations": {
+      "method": "GET", "path": "/locations/{locationID}/descendants", "call": "ListDescendantLocations", "action": "assetmanager.location.descendants",
+      "title": "List descendants",
+      "description": "Every place nested under this one at any depth, not just its direct children.",
+      "args": [{"from": "path", "as": "locationID", "description": "The place to walk down from."}],
+      "returns": [{"body": true}]
+    },
+
+    "create_asset": {
+      "method": "POST", "path": "/assets", "call": "CreateAsset", "action": "assetmanager.asset.create",
+      "status": 201,
+      "title": "Create asset",
+      "description": "Record a thing to track. Choose serialized for one physical unit, which needs its own tag, or fungible for a type counted by quantity. Creating it establishes no balance anywhere — that only comes from the ledger.",
+      "args": [{"from": "body", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "list_assets": {
+      "method": "GET", "path": "/assets", "call": "ListAssets", "action": "assetmanager.asset.list",
+      "title": "List assets",
+      "description": "List things, id order. Narrow by category, by tracking mode, or to those last seen at one place.",
+      "args": [{"from": "query", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "get_asset": {
+      "method": "GET", "path": "/assets/{assetID}", "call": "GetAsset", "action": "assetmanager.asset.read",
+      "title": "Read asset",
+      "description": "Read one thing. A deleted one reads as missing.",
+      "args": [{"from": "path", "as": "assetID", "description": "The thing to read."}],
+      "returns": [{"body": true}]
+    },
+    "update_asset": {
+      "method": "PATCH", "path": "/assets/{assetID}", "call": "UpdateAsset", "action": "assetmanager.asset.update",
+      "title": "Update asset",
+      "description": "Change a thing's name, category, tag or attributes. The tracking mode cannot be changed after creation — every entry already in the ledger would mean something different under the other reading — and the location is the ledger's to set, not a caller's.",
+      "args": [{"from": "body", "whole": true},
+               {"from": "path", "as": "assetID", "into": "ID", "description": "The thing to change. The address decides which, not the body."}],
+      "returns": [{"body": true}]
+    },
+    "delete_asset": {
+      "method": "DELETE", "path": "/assets/{assetID}", "call": "DeleteAsset", "action": "assetmanager.asset.delete",
+      "status": 204,
+      "title": "Delete asset",
+      "description": "Soft-delete a thing. Refused while any reservation against it is still open — release or commit those first.",
+      "args": [{"from": "path", "as": "assetID", "description": "The thing to delete."}],
+      "returns": [{"body": true}]
+    },
+    "get_asset_balance": {
+      "method": "GET", "path": "/assets/{assetID}/balance", "call": "GetAssetBalance", "action": "assetmanager.asset.balance",
+      "title": "Read balance",
+      "description": "How much of one thing is at one place, folded from the whole ledger rather than read from a stored total. The place is required: a balance with no place named would always be zero and would hide the mistake.",
+      "args": [{"from": "path", "as": "assetID", "description": "The thing to count."},
+               {"from": "query", "as": "location_id", "required": true, "description": "The place to count it at."}],
+      "returns": [{"as": "balance"}]
+    },
+
+    "post_movement": {
+      "method": "POST", "path": "/movements", "call": "PostMovement", "action": "assetmanager.movement.post",
+      "status": 201,
+      "title": "Post movement",
+      "description": "Append one entry to the ledger. Four shapes are postable: arrived names a destination and no origin, departed names an origin and no destination, transferred names two distinct places, and adjusted names a destination and may carry a negative quantity. A reversal is never posted here.",
+      "args": [{"from": "body", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "list_movements": {
+      "method": "GET", "path": "/movements", "call": "ListMovements", "action": "assetmanager.movement.list",
+      "title": "List movements",
+      "description": "List ledger entries. Narrow to one thing, or to one kind of entry.",
+      "args": [{"from": "query", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "get_movement": {
+      "method": "GET", "path": "/movements/{movementID}", "call": "GetMovement", "action": "assetmanager.movement.read",
+      "title": "Read movement",
+      "description": "Read one ledger entry. Entries are never edited or deleted, so what it says is what was recorded.",
+      "args": [{"from": "path", "as": "movementID", "description": "The entry to read."}],
+      "returns": [{"body": true}]
+    },
+    "reverse_movement": {
+      "method": "POST", "path": "/movements/{movementID}/reverse", "call": "ReverseMovement", "action": "assetmanager.movement.reverse",
+      "status": 201,
+      "title": "Reverse movement",
+      "description": "Post the mirror of an entry, leaving the original untouched. The mirror swaps origin and destination, so the pair folds to no net effect. An entry may be reversed at most once, and a reversal cannot itself be reversed.",
+      "args": [{"from": "path", "as": "movementID", "description": "The entry to mirror."},
+               {"from": "body", "as": "performed_by", "required": true, "description": "Who is recording the reversal."},
+               {"from": "body", "as": "note", "description": "Why it is being reversed."}],
+      "returns": [{"body": true}]
+    },
+
+    "create_hold": {
+      "method": "POST", "path": "/holds", "call": "CreateHold", "action": "assetmanager.hold.create",
+      "status": 201,
+      "title": "Create hold",
+      "description": "Set aside a quantity of one thing at one place until a stated time. Refused if that much is not actually available once every other open reservation there is counted.",
+      "args": [{"from": "body", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "list_holds": {
+      "method": "GET", "path": "/holds", "call": "ListHolds", "action": "assetmanager.hold.list",
+      "title": "List holds",
+      "description": "List reservations, id order. Narrow by thing, by place, or by where the reservation is in its life.",
+      "args": [{"from": "query", "whole": true}],
+      "returns": [{"body": true}]
+    },
+    "list_holds_expired": {
+      "method": "GET", "path": "/holds/expired", "call": "ListHoldsExpiredAsOf", "action": "assetmanager.hold.expired",
+      "title": "List expired holds",
+      "description": "Every still-open reservation whose time has passed as of the cutoff. The sweeper passes its own idea of now rather than this reading a clock, so a test can move time without one.",
+      "args": [{"from": "query", "as": "cutoff", "required": true, "description": "The moment to judge against, RFC 3339."}],
+      "returns": [{"body": true}]
+    },
+    "get_hold": {
+      "method": "GET", "path": "/holds/{holdID}", "call": "GetHold", "action": "assetmanager.hold.read",
+      "title": "Read hold",
+      "description": "Read one reservation.",
+      "args": [{"from": "path", "as": "holdID", "description": "The reservation to read."}],
+      "returns": [{"body": true}]
+    },
+    "commit_hold": {
+      "method": "POST", "path": "/holds/{holdID}/commit", "call": "CommitHold", "action": "assetmanager.hold.commit",
+      "title": "Commit hold",
+      "description": "Take up to the reserved quantity, posting a ledger entry out of the place it was held. Anything not taken is released in the same call: a reservation is committed once and there is no second commit on it afterwards.",
+      "args": [{"from": "path", "as": "holdID", "description": "The reservation to commit."},
+               {"from": "body", "as": "quantity", "required": true, "description": "How much to actually take, at most what was reserved."},
+               {"from": "body", "as": "kind", "required": true, "description": "The ledger entry to post: departed, or transferred when it is going somewhere named."},
+               {"from": "body", "as": "to_location_id", "description": "Where it is going, for a transfer."},
+               {"from": "body", "as": "performed_by", "required": true, "description": "Who is taking it."}],
+      "returns": [{"as": "hold"}, {"as": "movement"}]
+    },
+    "release_hold": {
+      "method": "POST", "path": "/holds/{holdID}/release", "call": "ReleaseHold", "action": "assetmanager.hold.release",
+      "title": "Release hold",
+      "description": "Give back a reservation with nothing taken, either because someone asked or because the sweeper found it past its time.",
+      "args": [{"from": "path", "as": "holdID", "description": "The reservation to release."}],
+      "returns": [{"body": true}]
+    }
+  },
+  "errors": {
+    "ErrLocationNotFound": 404,
+    "ErrAssetNotFound": 404,
+    "ErrMovementNotFound": 404,
+    "ErrHoldNotFound": 404,
+
+    "ErrLocationNotEmpty": 409,
+    "ErrAssetTrackingModeImmutable": 409,
+    "ErrAssetHasOpenHolds": 409,
+    "ErrMovementAlreadyReversed": 409,
+    "ErrInvalidHoldStatusTransition": 409,
+    "ErrInsufficientAvailable": 409,
+
+    "ErrInvalidLocation": 400,
+    "ErrInvalidAsset": 400,
+    "ErrAssetSerialTagExists": 400,
+    "ErrInvalidMovement": 400,
+    "ErrInvalidHold": 400
+  }
+}

@@ -1,6 +1,7 @@
 package routes_test
 
 import (
+	"net/http"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/aosanya/mwanachama-backend-shared/spec"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
+	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func testSpec(t *testing.T) *spec.Spec {
@@ -57,4 +59,15 @@ func tableFor(t *testing.T, s *spec.Spec, role string) string {
 		t.Fatalf("the spec fills no %q role", role)
 	}
 	return s.TableFor(o)
+}
+
+func handlerFor(t *testing.T, am mwanachamaassetmanager.AssetManager, action string) http.HandlerFunc {
+	t.Helper()
+	for _, r := range routes.Routes(am) {
+		if r.Action == action {
+			return r.Handler
+		}
+	}
+	t.Fatalf("the route table declares no %q", action)
+	return nil
 }

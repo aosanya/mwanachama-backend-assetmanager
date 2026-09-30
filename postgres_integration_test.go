@@ -1,13 +1,5 @@
-// postgres_integration_test.go exercises AssetManager against a real
-// Postgres database, rather than the in-memory sqlite-backed manager the
-// rest of this package's tests use.
-//
-// Skipped unless POSTGRES_URL is set. The unit tests elsewhere in this
-// package already exhaustively cover AssetManager's business logic; this
-// file's job is narrower — prove the real Postgres wiring (GORM
-// AutoMigrate, the serial_tag partial unique index) works end-to-end, and
-// specifically prove multi-level ListDescendantLocations against a real
-// database.
+//go:build integration
+
 package mwanachamaassetmanager_test
 
 import (

@@ -16,8 +16,8 @@ import (
 
 func (m *assetManager) CreateLocation(ctx context.Context, l models.Location) (models.Location, error) {
 	l.ID = newID()
-	if l.Name == "" {
-		return models.Location{}, fmt.Errorf("%w: Location.Name is required", ErrInvalidLocation)
+	if err := m.check(roleLocation, l, ErrInvalidLocation); err != nil {
+		return models.Location{}, err
 	}
 	if l.ParentLocationID != "" {
 		if _, err := m.GetLocation(ctx, l.ParentLocationID); err != nil {
@@ -67,8 +67,8 @@ func (m *assetManager) UpdateLocation(ctx context.Context, l models.Location) (m
 	if err != nil {
 		return models.Location{}, err
 	}
-	if l.Name == "" {
-		return models.Location{}, fmt.Errorf("%w: Location.Name is required", ErrInvalidLocation)
+	if err := m.check(roleLocation, l, ErrInvalidLocation); err != nil {
+		return models.Location{}, err
 	}
 	if l.ParentLocationID != current.ParentLocationID {
 		if err := m.validateReparent(ctx, current, l.ParentLocationID); err != nil {

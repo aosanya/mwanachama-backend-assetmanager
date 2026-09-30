@@ -26,17 +26,11 @@ import (
 // ([models.HoldStatusReserved]) hold there has already reserved.
 func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Hold, error) {
 	h.ID = newID()
-	if h.AssetID == "" {
-		return models.Hold{}, fmt.Errorf("%w: AssetID is required", ErrInvalidHold)
-	}
-	if h.LocationID == "" {
-		return models.Hold{}, fmt.Errorf("%w: LocationID is required", ErrInvalidHold)
+	if err := m.check(roleHold, h, ErrInvalidHold); err != nil {
+		return models.Hold{}, err
 	}
 	if h.Quantity <= 0 {
 		return models.Hold{}, fmt.Errorf("%w: Quantity must be positive", ErrInvalidHold)
-	}
-	if h.PlacedBy == "" {
-		return models.Hold{}, fmt.Errorf("%w: PlacedBy is required — every hold needs an accountable actor", ErrInvalidHold)
 	}
 	expiresAt, err := time.Parse(time.RFC3339, h.ExpiresAt)
 	if err != nil {

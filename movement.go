@@ -26,6 +26,9 @@ import (
 // until the next movement corrects it.
 func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (models.Movement, error) {
 	mv.ID = newID()
+	if err := m.check(roleMovement, mv, ErrInvalidMovement); err != nil {
+		return models.Movement{}, err
+	}
 	shape, err := validateMovementShape(mv)
 	if err != nil {
 		return models.Movement{}, err
@@ -76,12 +79,6 @@ func (s movementShape) absQuantity() int64 {
 // validateMovementShape checks that Kind/Quantity/FromLocationID/
 // ToLocationID form one of the four postable shapes.
 func validateMovementShape(mv models.Movement) (movementShape, error) {
-	if mv.AssetID == "" {
-		return movementShape{}, fmt.Errorf("%w: AssetID is required", ErrInvalidMovement)
-	}
-	if mv.PerformedBy == "" {
-		return movementShape{}, fmt.Errorf("%w: PerformedBy is required — every ledger entry needs an accountable actor, matching merchandise-entry's issued_by not-null invariant", ErrInvalidMovement)
-	}
 	switch mv.Kind {
 	case models.MovementKindArrived:
 		if mv.Quantity <= 0 {

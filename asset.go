@@ -15,8 +15,8 @@ import (
 
 func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.Asset, error) {
 	a.ID = newID()
-	if a.Name == "" {
-		return models.Asset{}, fmt.Errorf("%w: Asset.Name is required", ErrInvalidAsset)
+	if err := m.check(roleAsset, a, ErrInvalidAsset); err != nil {
+		return models.Asset{}, err
 	}
 	switch a.TrackingMode {
 	case models.AssetTrackingModeSerialized:
@@ -33,9 +33,6 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 			return models.Asset{}, ErrAssetSerialTagExists
 		}
 	case models.AssetTrackingModeFungible:
-	default:
-		return models.Asset{}, fmt.Errorf("%w: TrackingMode must be %q or %q, got %q",
-			ErrInvalidAsset, models.AssetTrackingModeSerialized, models.AssetTrackingModeFungible, a.TrackingMode)
 	}
 	if a.LocationID != "" {
 		if _, err := m.GetLocation(ctx, a.LocationID); err != nil {

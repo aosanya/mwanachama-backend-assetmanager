@@ -277,6 +277,16 @@
           "matches": "rfc3339"
         },
         {
+          "name": "starts_at",
+          "type": "timestamp",
+          "description": "Optional RFC 3339 start of the time slot this reservation claims. Given together with ends_at or not at all; a slotted reservation is refused when its slot overlaps another live reservation's slot on the same thing."
+        },
+        {
+          "name": "ends_at",
+          "type": "timestamp",
+          "description": "Optional RFC 3339 end of the time slot, after starts_at. The slot is half-open, so one slot may end exactly when the next begins."
+        },
+        {
           "name": "placed_by",
           "type": "string",
           "description": "Who placed the reservation, as an id this module never interprets. Required for the same reason a ledger entry names who recorded it.",

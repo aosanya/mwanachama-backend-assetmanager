@@ -26,6 +26,8 @@ type Hold struct {
 	Quantity          int64      `json:"quantity"`
 	CommittedQuantity int64      `json:"committed_quantity"`
 	ExpiresAt         string     `json:"expires_at"`
+	StartsAt          string     `json:"starts_at,omitempty"`
+	EndsAt            string     `json:"ends_at,omitempty"`
 	PlacedBy          string     `json:"placed_by"`
 	CreatedAt         string     `json:"created_at"`
 	UpdatedAt         string     `json:"updated_at"`

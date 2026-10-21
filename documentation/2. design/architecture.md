@@ -104,6 +104,32 @@ reserved ──► committed   (posts a Movement for the fulfilled quantity)
   amount is checked against the remaining reserved quantity at commit
   time.
 
+#### Time-slot holds
+
+A hold may also claim a time slot: `starts_at` and `ends_at`, both RFC 3339,
+given together or not at all, with the end after the start. Both are
+declared in the blueprint beside the `models.Hold` fields that carry them.
+
+A slotted hold is refused with `ErrHoldSlotOverlaps` (409) when its slot
+overlaps the slot of another live hold on the same asset. "Live" means
+status `reserved`; a committed, partially committed or released hold no
+longer claims its slot. The comparison is half-open, `[starts_at, ends_at)`,
+so one slot may end exactly when the next begins. The check spans every
+location of the asset, because a slot is a claim on the thing, not on a
+place. Malformed slots (one half missing, an end not after its start, a
+value that is not RFC 3339) are `ErrInvalidHold` (400).
+
+A spec can say a field is a timestamp but not that two rows' ranges must
+not intersect, so the overlap check is Go (`hold_slot.go`), not a declared
+rule. It is a read-then-insert check with the same race window the open
+availability rows (A13–A15) already record for quantity; closing that race
+is theirs, not this feature's.
+
+A hold without a slot behaves exactly as before: it is never compared
+against any slot, slotted or not, and is still bounded only by available
+quantity. `expires_at` keeps its meaning for both kinds — when an
+uncommitted reservation is released — and is independent of the slot.
+
 Holds only make sense against fungible Assets in the first instance — a
 serialized Asset (one specific unit) is either reserved or not, no partial
 math applies. Whether serialized Assets get holds at all is left to the

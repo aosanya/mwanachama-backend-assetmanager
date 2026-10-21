@@ -39,11 +39,20 @@ func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Ho
 	if !expiresAt.After(time.Now().UTC()) {
 		return models.Hold{}, fmt.Errorf("%w: ExpiresAt must be in the future", ErrInvalidHold)
 	}
+	slot, err := holdSlotOf(h)
+	if err != nil {
+		return models.Hold{}, err
+	}
 	if _, err := m.GetAsset(ctx, h.AssetID); err != nil {
 		return models.Hold{}, err
 	}
 	if _, err := m.GetLocation(ctx, h.LocationID); err != nil {
 		return models.Hold{}, err
+	}
+	if slot != nil {
+		if err := m.refuseOverlappingSlot(ctx, h.AssetID, *slot); err != nil {
+			return models.Hold{}, err
+		}
 	}
 
 	available, err := m.availableQuantity(ctx, h.AssetID, h.LocationID)

@@ -66,7 +66,7 @@ holds the two sets together.
 | Status | Sentinels |
 | ------ | --------- |
 | 404 | `ErrLocationNotFound`, `ErrAssetNotFound`, `ErrMovementNotFound`, `ErrHoldNotFound` |
-| 409 | `ErrLocationNotEmpty`, `ErrAssetTrackingModeImmutable`, `ErrAssetHasOpenHolds`, `ErrMovementAlreadyReversed`, `ErrInvalidHoldStatusTransition`, `ErrInsufficientAvailable` |
+| 409 | `ErrLocationNotEmpty`, `ErrAssetTrackingModeImmutable`, `ErrAssetHasOpenHolds`, `ErrMovementAlreadyReversed`, `ErrInvalidHoldStatusTransition`, `ErrInsufficientAvailable`, `ErrHoldSlotOverlaps` |
 | 400 | `ErrInvalidLocation`, `ErrInvalidAsset`, `ErrAssetSerialTagExists`, `ErrInvalidMovement`, `ErrInvalidHold` |
 
 Before the conversion each aggregate had its own table. Folding them into

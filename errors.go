@@ -70,3 +70,5 @@ var ErrInvalidHoldStatusTransition = errors.New("invalid hold status transition"
 // requested quantity exceeds what's available at the given (asset,
 // location) pair once existing open holds are accounted for.
 var ErrInsufficientAvailable = errors.New("insufficient available quantity")
+
+var ErrHoldSlotOverlaps = errors.New("hold slot overlaps another live hold on the same asset")

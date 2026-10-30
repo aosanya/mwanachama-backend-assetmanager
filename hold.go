@@ -1,11 +1,3 @@
-// hold.go — Hold CRUD + the commit/release lifecycle for [assetManager].
-//
-// A Hold is single-shot: [assetManager.CommitHold] is called at most once
-// per hold, committing up to its full reserved Quantity in that one call —
-// whatever isn't committed is released in the same call, matching
-// [models.HoldStatus.CanTransitionTo]'s transition table (every transition
-// out of reserved is terminal; there is no partially_committed →
-// committed path for a second, later commit).
 package mwanachamaassetmanager
 
 import (
@@ -19,11 +11,6 @@ import (
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
-// CreateHold reserves h.Quantity of h.AssetID at h.LocationID (required —
-// availability is only meaningful against a specific location) until
-// h.ExpiresAt, provided that much is actually available: the asset's
-// balance at that location minus what every other still-open
-// ([models.HoldStatusReserved]) hold there has already reserved.
 func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Hold, error) {
 	h.ID = newID()
 	if err := m.check(roleHold, h, ErrInvalidHold); err != nil {
@@ -75,10 +62,6 @@ func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Ho
 	return h, nil
 }
 
-// availableQuantity is the asset's balance at locationID minus the
-// remaining Quantity of every other open (status = reserved) Hold there.
-// A partially_committed or released Hold no longer reserves anything —
-// it's terminal, its remainder was already given back.
 func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationID string) (int64, error) {
 	balance, err := m.GetAssetBalance(ctx, assetID, locationID)
 	if err != nil {
@@ -95,7 +78,6 @@ func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationI
 	return balance - reserved, nil
 }
 
-// GetHold reads a single Hold row.
 func (m *assetManager) GetHold(ctx context.Context, holdID string) (models.Hold, error) {
 	var out models.Hold
 	q := m.store.Query(ctx, roleHold).Where("id = ?", holdID)
@@ -108,13 +90,6 @@ func (m *assetManager) GetHold(ctx context.Context, holdID string) (models.Hold,
 	return out, nil
 }
 
-// CommitHold fulfills a reserved Hold — up to quantity of it — by posting a
-// Movement of the given kind (must be [models.MovementKindDeparted] or
-// [models.MovementKindTransferred]; committing a hold always removes stock
-// from where it was held) from the hold's LocationID, to toLocationID when
-// kind is transferred. quantity may be less than the hold's full reserved
-// amount; whatever's left is released in this same call — see the package
-// doc for why there is no later, second commit on the same hold.
 func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity int64, kind models.MovementKind, toLocationID, performedBy string) (models.Hold, models.Movement, error) {
 	hold, err := m.GetHold(ctx, holdID)
 	if err != nil {
@@ -131,42 +106,38 @@ func (m *assetManager) CommitHold(ctx context.Context, holdID string, quantity i
 			ErrInvalidMovement, models.MovementKindDeparted, models.MovementKindTransferred, kind)
 	}
 
-	mv := models.Movement{
+	committed := hold
+	committed.CommittedQuantity = quantity
+	committed.Status = models.HoldStatusCommitted
+	if quantity != hold.Quantity {
+		committed.Status = models.HoldStatusPartiallyCommitted
+	}
+	committed.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	if err := m.claimReservedHold(ctx, committed); err != nil {
+		return models.Hold{}, models.Movement{}, fmt.Errorf("CommitHold: %w", err)
+	}
+
+	movement, err := m.PostMovement(ctx, models.Movement{
 		AssetID:        hold.AssetID,
 		Kind:           kind,
 		Quantity:       quantity,
 		FromLocationID: hold.LocationID,
 		ToLocationID:   toLocationID,
 		PerformedBy:    performedBy,
-	}
-	movement, err := m.PostMovement(ctx, mv)
-	if err != nil {
+	})
+	if err != nil && movement.ID == "" {
+		if undone := m.unclaimHold(ctx, committed); undone != nil {
+			return models.Hold{}, models.Movement{}, errors.Join(fmt.Errorf("CommitHold: %w", err), undone)
+		}
 		return models.Hold{}, models.Movement{}, fmt.Errorf("CommitHold: %w", err)
 	}
-
-	hold.CommittedQuantity = quantity
-	if quantity == hold.Quantity {
-		hold.Status = models.HoldStatusCommitted
-	} else {
-		hold.Status = models.HoldStatusPartiallyCommitted
-	}
-	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-
-	err = m.store.Query(ctx, roleHold).Where("id = ?", hold.ID).
-		Updates(map[string]any{
-			columnName("Status"):            string(hold.Status),
-			columnName("CommittedQuantity"): hold.CommittedQuantity,
-			columnName("UpdatedAt"):         hold.UpdatedAt,
-		}).Error
 	if err != nil {
-		return models.Hold{}, movement, fmt.Errorf("CommitHold: movement posted (id=%s) but hold update failed: %w", movement.ID, err)
+		return models.Hold{}, movement, fmt.Errorf("CommitHold: %w", err)
 	}
-	return hold, movement, nil
+	return committed, movement, nil
 }
 
-// ReleaseHold releases a reserved Hold with nothing committed — manual
-// release, or the outcome the watchdog applies once ExpiresAt has passed
-// (see hold_watchdog.go).
 func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (models.Hold, error) {
 	hold, err := m.GetHold(ctx, holdID)
 	if err != nil {
@@ -178,18 +149,43 @@ func (m *assetManager) ReleaseHold(ctx context.Context, holdID string) (models.H
 	hold.Status = models.HoldStatusReleased
 	hold.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	err = m.store.Query(ctx, roleHold).Where("id = ?", hold.ID).
-		Updates(map[string]any{
-			columnName("Status"):    string(hold.Status),
-			columnName("UpdatedAt"): hold.UpdatedAt,
-		}).Error
-	if err != nil {
+	if err := m.claimReservedHold(ctx, hold); err != nil {
 		return models.Hold{}, fmt.Errorf("ReleaseHold: %w", err)
 	}
 	return hold, nil
 }
 
-// ListHolds returns all Hold rows that match the filter, id order.
+func (m *assetManager) claimReservedHold(ctx context.Context, next models.Hold) error {
+	written := m.store.Query(ctx, roleHold).
+		Where("id = ? AND status = ?", next.ID, string(models.HoldStatusReserved)).
+		Updates(map[string]any{
+			columnName("Status"):            string(next.Status),
+			columnName("CommittedQuantity"): next.CommittedQuantity,
+			columnName("UpdatedAt"):         next.UpdatedAt,
+		})
+	if written.Error != nil {
+		return classifyConflict(written.Error)
+	}
+	if written.RowsAffected == 0 {
+		return ErrInvalidHoldStatusTransition
+	}
+	return nil
+}
+
+func (m *assetManager) unclaimHold(ctx context.Context, claimed models.Hold) error {
+	written := m.store.Query(ctx, roleHold).
+		Where("id = ? AND status = ?", claimed.ID, string(claimed.Status)).
+		Updates(map[string]any{
+			columnName("Status"):            string(models.HoldStatusReserved),
+			columnName("CommittedQuantity"): int64(0),
+			columnName("UpdatedAt"):         time.Now().UTC().Format(time.RFC3339),
+		})
+	if written.Error != nil {
+		return fmt.Errorf("CommitHold: hold %s stays %s after its movement was refused: %w", claimed.ID, claimed.Status, written.Error)
+	}
+	return nil
+}
+
 func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]models.Hold, error) {
 	q := m.store.Query(ctx, roleHold)
 	if filter.AssetID != "" {

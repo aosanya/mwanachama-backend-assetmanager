@@ -187,6 +187,7 @@
     "ErrInvalidHoldStatusTransition": 409,
     "ErrInsufficientAvailable": 409,
     "ErrHoldSlotOverlaps": 409,
+    "ErrConflict": 409,
 
     "ErrInvalidLocation": 400,
     "ErrInvalidAsset": 400,

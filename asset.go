@@ -60,7 +60,7 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 		return tx.WithContext(ctx).Table(m.store.Table(roleAsset)).Create(row).Error
 	})
 	if err != nil {
-		return models.Asset{}, fmt.Errorf("CreateAsset: %w", err)
+		return models.Asset{}, fmt.Errorf("CreateAsset: %w", classifyConflict(err))
 	}
 	return a, nil
 }
@@ -90,16 +90,19 @@ func (m *assetManager) UpdateAsset(ctx context.Context, a models.Asset) (models.
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	err = m.store.Query(ctx, roleAsset).Where("id = ?", a.ID).
+	written := m.store.Query(ctx, roleAsset).Where("id = ? AND deleted = ?", a.ID, false).
 		Updates(map[string]any{
 			columnName("Name"):           a.Name,
 			columnName("Category"):       a.Category,
 			columnName("AttributesJSON"): a.AttributesJSON,
 			columnName("SerialTag"):      a.SerialTag,
 			columnName("UpdatedAt"):      now,
-		}).Error
-	if err != nil {
-		return models.Asset{}, fmt.Errorf("UpdateAsset: %w", err)
+		})
+	if written.Error != nil {
+		return models.Asset{}, fmt.Errorf("UpdateAsset: %w", classifyConflict(written.Error))
+	}
+	if written.RowsAffected == 0 {
+		return models.Asset{}, ErrAssetNotFound
 	}
 	current.Name = a.Name
 	current.Category = a.Category

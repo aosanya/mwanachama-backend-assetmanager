@@ -72,3 +72,5 @@ var ErrInvalidHoldStatusTransition = errors.New("invalid hold status transition"
 var ErrInsufficientAvailable = errors.New("insufficient available quantity")
 
 var ErrHoldSlotOverlaps = errors.New("hold slot overlaps another live hold on the same asset")
+
+var ErrConflict = errors.New("mwanachamaassetmanager: another write got there first, try again")

@@ -45,7 +45,7 @@ func (m *assetManager) CreateLocation(ctx context.Context, l models.Location) (m
 		return tx.WithContext(ctx).Table(m.store.Table(roleLocation)).Create(row).Error
 	})
 	if err != nil {
-		return models.Location{}, fmt.Errorf("CreateLocation: %w", err)
+		return models.Location{}, fmt.Errorf("CreateLocation: %w", classifyConflict(err))
 	}
 	return l, nil
 }
@@ -77,15 +77,18 @@ func (m *assetManager) UpdateLocation(ctx context.Context, l models.Location) (m
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	err = m.store.Query(ctx, roleLocation).Where("id = ?", l.ID).
+	written := m.store.Query(ctx, roleLocation).Where("id = ? AND deleted = ?", l.ID, false).
 		Updates(map[string]any{
 			columnName("Name"):             l.Name,
 			columnName("Kind"):             l.Kind,
 			columnName("ParentLocationID"): l.ParentLocationID,
 			columnName("UpdatedAt"):        now,
-		}).Error
-	if err != nil {
-		return models.Location{}, fmt.Errorf("UpdateLocation: %w", err)
+		})
+	if written.Error != nil {
+		return models.Location{}, fmt.Errorf("UpdateLocation: %w", classifyConflict(written.Error))
+	}
+	if written.RowsAffected == 0 {
+		return models.Location{}, ErrLocationNotFound
 	}
 	current.Name = l.Name
 	current.Kind = l.Kind

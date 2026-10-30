@@ -28,6 +28,7 @@ var sentinels = map[string]error{
 	"ErrInvalidHoldStatusTransition": mwanachamaassetmanager.ErrInvalidHoldStatusTransition,
 	"ErrInsufficientAvailable":       mwanachamaassetmanager.ErrInsufficientAvailable,
 	"ErrHoldSlotOverlaps":            mwanachamaassetmanager.ErrHoldSlotOverlaps,
+	"ErrConflict":                    mwanachamaassetmanager.ErrConflict,
 }
 
 var AnonymousActions = []string{}

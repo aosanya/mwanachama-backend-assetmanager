@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const codeSequenceAttempts = 5
@@ -18,25 +19,23 @@ func (m *assetManager) nextCode(ctx context.Context, tx *gorm.DB, entityType, pr
 	o := m.store.Object(roleCodeSequence)
 	table := m.store.Table(roleCodeSequence)
 
+	seed, err := encode(o, codeSequence{EntityType: entityType, NextNumber: 1})
+	if err != nil {
+		return "", fmt.Errorf("nextCode: %w", err)
+	}
+	if err := tx.WithContext(ctx).Table(table).
+		Clauses(clause.OnConflict{DoNothing: true}).Create(seed).Error; err != nil {
+		return "", fmt.Errorf("nextCode: seed the %s counter: %w", entityType, err)
+	}
+
 	for attempt := 0; attempt < codeSequenceAttempts; attempt++ {
 		var rows []map[string]any
 		err := tx.WithContext(ctx).Table(table).Where("entity_type = ?", entityType).Limit(1).Find(&rows).Error
 		if err != nil {
 			return "", fmt.Errorf("nextCode: %w", err)
 		}
-
 		if len(rows) == 0 {
-			row, err := encode(o, codeSequence{EntityType: entityType, NextNumber: 2})
-			if err != nil {
-				return "", fmt.Errorf("nextCode: %w", err)
-			}
-			if err := tx.WithContext(ctx).Table(table).Create(row).Error; err != nil {
-				if isUniqueViolation(err) {
-					continue
-				}
-				return "", fmt.Errorf("nextCode: %w", err)
-			}
-			return fmt.Sprintf("%s-%d", prefix, 1), nil
+			return "", fmt.Errorf("nextCode: %s: the counter vanished after being seeded", entityType)
 		}
 
 		var seq codeSequence

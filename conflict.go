@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/aosanya/mwanachama-backend-shared/gormutil"
 )
 
 var busyMessages = []string{
@@ -15,18 +13,6 @@ var busyMessages = []string{
 	"SQLITE_BUSY",
 	"could not serialize access",
 	"deadlock detected",
-}
-
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	var conflicted bool
-	gormutil.ClassifyError(err,
-		func(string) error { return err },
-		func(string) error { conflicted = true; return err },
-	)
-	return conflicted
 }
 
 func isBusy(err error) bool {

@@ -8,14 +8,14 @@
 scripts/hub-copy-diff.sh [path-to-hub-modules-assetmanager]
 ```
 
-The default path is `../projects/hub-steward/code/wakala-api/modules/assetmanager`, relative to this repository's parent folder. The exit code is 1 when the trees differ, 0 when they do not. The script and `scripts/hubdiff` are the ones of `mwanachama-backend-forms`, which generalised the one of `mwanachama-backend-git` (G78) to take the module path from `go.mod`.
+The default path is `../projects/hub-steward/code/wakala-api/modules/assetmanager`, relative to this repository's parent folder. The exit code is 0 when every line of the `diff -r` output starts with `Only in backend`, and 1 when any line starts with `diff `, `Binary files ` or `Only in hub`. The script prints the whole report either way. The script and `scripts/hubdiff` are the ones of `mwanachama-backend-forms`, which generalised the one of `mwanachama-backend-git` (G78) to take the module path from `go.mod`.
 
 ## What it does
 
 1. Copies the `*.go` and `*.json` files of both trees into two temporary folders, leaving out `cmd/`, `documentation/`, `scripts/` and `.git/`.
 2. Rewrites the hub's imports: `wakalaserver/modules/shared/` becomes `github.com/aosanya/mwanachama-backend-shared/` and `wakalaserver/modules/assetmanager` becomes `github.com/aosanya/mwanachama-backend-assetmanager`.
 3. Runs every Go file on both sides through `scripts/hubdiff`, which parses it, drops all comments and prints it with `gofmt`, so comments and layout do not show as differences.
-4. Runs `diff -r backend hub`.
+4. Runs `diff -r backend hub`, prints the report, and sets the exit code by the rule above. A changed `.go` or `.json` file, a file only the hub has, and a binary difference exit 1; files only this repository has (its tests and `spec/`) do not.
 
 ## Result of 2026-11-16
 

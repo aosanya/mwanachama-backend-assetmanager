@@ -28,4 +28,6 @@ find "$work/hub" -name '*.go' -print0 | HUB_NAME="$name" MODULE="$module" xargs 
 (cd "$repo" && go run ./scripts/hubdiff "$work/hub")
 
 cd "$work"
-diff -r backend hub | sed "s#^diff -r backend/#diff #"
+report="$(diff -r backend hub | sed "s#^diff -r backend/#diff #" || true)"
+[ -z "$report" ] || printf '%s\n' "$report"
+! printf '%s\n' "$report" | grep -qE '^(diff |Binary files |Only in hub)'

@@ -223,9 +223,10 @@
           "fields": ["asset_id"]
         },
         {
-          "name": "reverses",
-          "description": "Answers whether an entry has already been mirrored, which is what makes a reversal at-most-once.",
+          "name": "reversed_once",
+          "description": "Answers whether an entry has already been mirrored and refuses a second mirror, which is what makes a reversal at-most-once when two arrive together.",
           "fields": ["reverses_movement_id"],
+          "unique": true,
           "where": [{ "field": "reverses_movement_id", "op": "not_empty" }]
         }
       ]

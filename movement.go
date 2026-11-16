@@ -6,24 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aosanya/mwanachama-backend-shared/gormutil"
 	"github.com/aosanya/mwanachama-backend-shared/specstore"
 
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
-// PostMovement validates and appends a new Movement entry, then updates the
-// affected Asset's denormalized LocationID to match. Kind must be one of
-// [models.MovementKindArrived], [models.MovementKindTransferred],
-// [models.MovementKindDeparted], or [models.MovementKindAdjusted] —
-// [models.MovementKindReversed] entries are only ever created by
-// [assetManager.ReverseMovement], never posted directly.
-//
-// Movement creation and the Asset.location_id patch are two separate calls,
-// not one atomic transaction — same gap mwanachama-backend-taskmanager's
-// WorkflowRun rollback (W6) documents and defers, unaffected by this
-// storage swap. A crash between the two leaves the ledger correct (it's the
-// only source of truth for balance) and the denormalized LocationID stale
-// until the next movement corrects it.
 func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (models.Movement, error) {
 	mv.ID = newID()
 	if err := m.check(roleMovement, mv, ErrInvalidMovement); err != nil {
@@ -62,9 +50,6 @@ func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (mo
 	return out, nil
 }
 
-// movementShape is the outcome of validating a Movement's Kind/Quantity/
-// location combination — carried so callers don't have to re-derive
-// absQuantity from a possibly-negative (adjusted) Quantity.
 type movementShape struct {
 	quantity int64
 }
@@ -76,8 +61,6 @@ func (s movementShape) absQuantity() int64 {
 	return s.quantity
 }
 
-// validateMovementShape checks that Kind/Quantity/FromLocationID/
-// ToLocationID form one of the four postable shapes.
 func validateMovementShape(mv models.Movement) (movementShape, error) {
 	switch mv.Kind {
 	case models.MovementKindArrived:
@@ -119,8 +102,6 @@ func validateMovementShape(mv models.Movement) (movementShape, error) {
 	return movementShape{quantity: mv.Quantity}, nil
 }
 
-// validateMovementLocations confirms every non-empty location field
-// references a real Location.
 func (m *assetManager) validateMovementLocations(ctx context.Context, mv models.Movement) error {
 	for _, locID := range []string{mv.FromLocationID, mv.ToLocationID} {
 		if locID == "" {
@@ -136,9 +117,6 @@ func (m *assetManager) validateMovementLocations(ctx context.Context, mv models.
 	return nil
 }
 
-// syncAssetLocation patches Asset.location_id to reflect mv's destination —
-// ToLocationID if the movement arrived somewhere, otherwise cleared (the
-// asset left the system, or a reversal undid its last recorded position).
 func (m *assetManager) syncAssetLocation(ctx context.Context, mv models.Movement) error {
 	err := m.store.Query(ctx, roleAsset).Where("id = ?", mv.AssetID).
 		Updates(map[string]any{
@@ -151,12 +129,6 @@ func (m *assetManager) syncAssetLocation(ctx context.Context, mv models.Movement
 	return nil
 }
 
-// ReverseMovement posts the mirror of an existing Movement — the same rule
-// merchandise-entry.md's rpc_resolve_merchandise_dispute follows: "reverse
-// posts the mirror, original untouched". The reversal's From/To locations
-// are the original's swapped, which is what makes GetAssetBalance's fold
-// cancel the pair out to zero net effect regardless of the original Kind's
-// sign convention.
 func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performedBy, note string) (models.Movement, error) {
 	if performedBy == "" {
 		return models.Movement{}, fmt.Errorf("%w: performedBy is required — every ledger entry needs an accountable actor", ErrInvalidMovement)
@@ -194,6 +166,9 @@ func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performe
 
 	reversal.ID = newID()
 	if err := m.store.Insert(ctx, roleMovement, reversal); err != nil {
+		if gormutil.IsUniqueViolation(err) {
+			return models.Movement{}, ErrMovementAlreadyReversed
+		}
 		return models.Movement{}, fmt.Errorf("ReverseMovement: %w", err)
 	}
 	out := reversal
@@ -204,7 +179,6 @@ func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performe
 	return out, nil
 }
 
-// GetMovement reads a single Movement row.
 func (m *assetManager) GetMovement(ctx context.Context, movementID string) (models.Movement, error) {
 	var out models.Movement
 	q := m.store.Query(ctx, roleMovement).Where("id = ?", movementID)
@@ -217,9 +191,6 @@ func (m *assetManager) GetMovement(ctx context.Context, movementID string) (mode
 	return out, nil
 }
 
-// ListMovements returns all Movement rows that match the filter, in no
-// particular guaranteed order (callers folding a balance don't need one —
-// sum is order-independent).
 func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter) ([]models.Movement, error) {
 	q := m.store.Query(ctx, roleMovement)
 	if filter.AssetID != "" {
@@ -236,13 +207,6 @@ func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter)
 	return out, nil
 }
 
-// GetAssetBalance folds every Movement for assetID into the net quantity
-// currently at locationID: each movement contributes +Quantity where
-// ToLocationID == locationID and -Quantity where FromLocationID ==
-// locationID (both can apply to a single "adjusted" entry's ToLocationID
-// only; a reversal is just another Movement in the fold, so it cancels its
-// original by construction — see ReverseMovement's swapped From/To). Never
-// a stored running total — always recomputed from the ledger.
 func (m *assetManager) GetAssetBalance(ctx context.Context, assetID, locationID string) (int64, error) {
 	if locationID == "" {
 		return 0, fmt.Errorf("%w: a balance is only meaningful at a named location", ErrInvalidAsset)

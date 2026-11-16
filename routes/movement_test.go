@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
+	"github.com/aosanya/mwanachama-backend-assetmanager/routes"
 )
 
 func TestPostMovement(t *testing.T) {
@@ -139,7 +140,7 @@ func TestReverseMovement_MissingPerformedBy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed PostMovement: %v", err)
 	}
-	handler := handlerFor(t, am, "assetmanager.movement.reverse")
+	handler := handlerWith(t, am, routes.Mount{}, "assetmanager.movement.reverse")
 
 	req := withPathValue(httptest.NewRequest(http.MethodPost, "/movements/"+mv.ID+"/reverse", strings.NewReader(`{}`)), "movementID", mv.ID)
 	rec := httptest.NewRecorder()

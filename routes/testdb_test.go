@@ -1,6 +1,7 @@
 package routes_test
 
 import (
+	"context"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -61,9 +62,18 @@ func tableFor(t *testing.T, s *spec.Spec, role string) string {
 	return s.TableFor(o)
 }
 
+func signedBy(actor string) routes.Mount {
+	return routes.Mount{Caller: func(context.Context) string { return actor }}
+}
+
 func handlerFor(t *testing.T, am mwanachamaassetmanager.AssetManager, action string) http.HandlerFunc {
 	t.Helper()
-	for _, r := range routes.Routes(am) {
+	return handlerWith(t, am, signedBy(testActor), action)
+}
+
+func handlerWith(t *testing.T, am mwanachamaassetmanager.AssetManager, mount routes.Mount, action string) http.HandlerFunc {
+	t.Helper()
+	for _, r := range routes.RoutesFor(am, mount) {
 		if r.Action == action {
 			return r.Handler
 		}

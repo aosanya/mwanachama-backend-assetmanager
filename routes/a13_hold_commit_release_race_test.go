@@ -23,7 +23,7 @@ func raceTestManager(t *testing.T) mwanachamaassetmanager.AssetManager {
 
 func raceMux(am mwanachamaassetmanager.AssetManager) *http.ServeMux {
 	m := http.NewServeMux()
-	for _, rt := range routes.Routes(am) {
+	for _, rt := range routes.RoutesFor(am, signedBy("committer")) {
 		m.Handle(rt.Pattern(""), rt.Handler)
 	}
 	return m

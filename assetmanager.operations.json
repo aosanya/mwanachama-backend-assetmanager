@@ -98,7 +98,8 @@
       "status": 201,
       "title": "Post movement",
       "description": "Append one entry to the ledger. Four shapes are postable: arrived names a destination and no origin, departed names an origin and no destination, transferred names two distinct places, and adjusted names a destination and may carry a negative quantity. A reversal is never posted here.",
-      "args": [{"from": "body", "whole": true}],
+      "args": [{"from": "body", "whole": true},
+               {"from": "caller", "as": "performed_by", "into": "PerformedBy", "description": "Who recorded the entry, resolved from the session rather than the request."}],
       "returns": [{"body": true}]
     },
     "list_movements": {
@@ -121,7 +122,7 @@
       "title": "Reverse movement",
       "description": "Post the mirror of an entry, leaving the original untouched. The mirror swaps origin and destination, so the pair folds to no net effect. An entry may be reversed at most once, and a reversal cannot itself be reversed.",
       "args": [{"from": "path", "as": "movementID", "description": "The entry to mirror."},
-               {"from": "body", "as": "performed_by", "required": true, "description": "Who is recording the reversal."},
+               {"from": "caller", "as": "performed_by", "description": "Who is recording the reversal, resolved from the session rather than the request."},
                {"from": "body", "as": "note", "description": "Why it is being reversed."}],
       "returns": [{"body": true}]
     },
@@ -131,7 +132,8 @@
       "status": 201,
       "title": "Create hold",
       "description": "Set aside a quantity of one thing at one place until a stated time. Refused if that much is not actually available once every other open reservation there is counted.",
-      "args": [{"from": "body", "whole": true}],
+      "args": [{"from": "body", "whole": true},
+               {"from": "caller", "as": "placed_by", "into": "PlacedBy", "description": "Who placed the reservation, resolved from the session rather than the request."}],
       "returns": [{"body": true}]
     },
     "list_holds": {
@@ -163,7 +165,7 @@
                {"from": "body", "as": "quantity", "required": true, "description": "How much to actually take, at most what was reserved."},
                {"from": "body", "as": "kind", "required": true, "description": "The ledger entry to post: departed, or transferred when it is going somewhere named."},
                {"from": "body", "as": "to_location_id", "description": "Where it is going, for a transfer."},
-               {"from": "body", "as": "performed_by", "required": true, "description": "Who is taking it."}],
+               {"from": "caller", "as": "performed_by", "description": "Who is taking it, resolved from the session rather than the request."}],
       "returns": [{"as": "hold"}, {"as": "movement"}]
     },
     "release_hold": {

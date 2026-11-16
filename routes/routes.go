@@ -29,6 +29,7 @@ var sentinels = map[string]error{
 	"ErrInsufficientAvailable":       mwanachamaassetmanager.ErrInsufficientAvailable,
 	"ErrHoldSlotOverlaps":            mwanachamaassetmanager.ErrHoldSlotOverlaps,
 	"ErrConflict":                    mwanachamaassetmanager.ErrConflict,
+	"ErrInvalidFilter":               mwanachamaassetmanager.ErrInvalidFilter,
 }
 
 var AnonymousActions = []string{}

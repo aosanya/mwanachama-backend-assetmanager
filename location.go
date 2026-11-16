@@ -126,14 +126,14 @@ func (m *assetManager) DeleteLocation(ctx context.Context, locationID string) er
 	if _, err := m.GetLocation(ctx, locationID); err != nil {
 		return err
 	}
-	children, err := m.ListLocations(ctx, LocationFilter{ParentLocationID: locationID})
+	children, err := m.everyLocation(ctx, LocationFilter{ParentLocationID: locationID})
 	if err != nil {
 		return fmt.Errorf("DeleteLocation: %w", err)
 	}
 	if len(children) > 0 {
 		return ErrLocationNotEmpty
 	}
-	assetsHere, err := m.ListAssets(ctx, AssetFilter{LocationID: locationID})
+	assetsHere, err := m.everyAsset(ctx, AssetFilter{LocationID: locationID})
 	if err != nil {
 		return fmt.Errorf("DeleteLocation: %w", err)
 	}
@@ -153,23 +153,38 @@ func (m *assetManager) DeleteLocation(ctx context.Context, locationID string) er
 	return nil
 }
 
-func (m *assetManager) ListLocations(ctx context.Context, filter LocationFilter) ([]models.Location, error) {
+func (m *assetManager) locationQuery(ctx context.Context, filter LocationFilter) *gorm.DB {
 	q := m.store.Query(ctx, roleLocation).Where("deleted = ?", false)
 	if filter.RootOnly {
 		q = q.Where("parent_location_id = ?", "")
 	} else if filter.ParentLocationID != "" {
 		q = q.Where("parent_location_id = ?", filter.ParentLocationID)
 	}
+	return q.Order("id")
+}
 
-	out, err := specstore.List[models.Location](m.store, q.Order("id"), roleLocation)
+func (m *assetManager) ListLocations(ctx context.Context, filter LocationFilter) ([]models.Location, error) {
+	q, err := page(m.locationQuery(ctx, filter), filter.Limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("ListLocations: %w", err)
+	}
+	out, err := specstore.List[models.Location](m.store, q, roleLocation)
 	if err != nil {
 		return nil, fmt.Errorf("ListLocations: %w", err)
 	}
 	return out, nil
 }
 
+func (m *assetManager) everyLocation(ctx context.Context, filter LocationFilter) ([]models.Location, error) {
+	out, err := specstore.List[models.Location](m.store, m.locationQuery(ctx, filter), roleLocation)
+	if err != nil {
+		return nil, fmt.Errorf("everyLocation: %w", err)
+	}
+	return out, nil
+}
+
 func (m *assetManager) ListDescendantLocations(ctx context.Context, locationID string) ([]models.Location, error) {
-	all, err := m.ListLocations(ctx, LocationFilter{})
+	all, err := m.everyLocation(ctx, LocationFilter{})
 	if err != nil {
 		return nil, fmt.Errorf("ListDescendantLocations: %w", err)
 	}

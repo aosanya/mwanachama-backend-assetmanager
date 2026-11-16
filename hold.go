@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/aosanya/mwanachama-backend-shared/specstore"
 
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
@@ -80,7 +82,7 @@ func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationI
 	if err != nil {
 		return 0, err
 	}
-	openHolds, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, LocationID: locationID, Status: models.HoldStatusReserved})
+	openHolds, err := m.everyHold(ctx, HoldFilter{AssetID: assetID, LocationID: locationID, Status: models.HoldStatusReserved})
 	if err != nil {
 		return 0, err
 	}
@@ -199,7 +201,7 @@ func (m *assetManager) unclaimHold(ctx context.Context, claimed models.Hold) err
 	return nil
 }
 
-func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]models.Hold, error) {
+func (m *assetManager) holdQuery(ctx context.Context, filter HoldFilter) *gorm.DB {
 	q := m.store.Query(ctx, roleHold)
 	if filter.AssetID != "" {
 		q = q.Where("asset_id = ?", filter.AssetID)
@@ -210,10 +212,25 @@ func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]mode
 	if filter.Status != "" {
 		q = q.Where("status = ?", string(filter.Status))
 	}
+	return q.Order("id")
+}
 
-	out, err := specstore.List[models.Hold](m.store, q.Order("id"), roleHold)
+func (m *assetManager) ListHolds(ctx context.Context, filter HoldFilter) ([]models.Hold, error) {
+	q, err := page(m.holdQuery(ctx, filter), filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("ListHolds: %w", err)
+	}
+	out, err := specstore.List[models.Hold](m.store, q, roleHold)
+	if err != nil {
+		return nil, fmt.Errorf("ListHolds: %w", err)
+	}
+	return out, nil
+}
+
+func (m *assetManager) everyHold(ctx context.Context, filter HoldFilter) ([]models.Hold, error) {
+	out, err := specstore.List[models.Hold](m.store, m.holdQuery(ctx, filter), roleHold)
+	if err != nil {
+		return nil, fmt.Errorf("everyHold: %w", err)
 	}
 	return out, nil
 }

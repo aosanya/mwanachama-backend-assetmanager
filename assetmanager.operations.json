@@ -11,7 +11,7 @@
     "list_locations": {
       "method": "GET", "path": "/locations", "call": "ListLocations", "action": "assetmanager.location.list",
       "title": "List locations",
-      "description": "List places, newest id last. Narrow to one place's direct children, or to the roots with no parent at all.",
+      "description": "List places, newest id last. Narrow to one place's direct children, or to the roots with no parent at all. A page holds at most 500 rows: pass limit (1 to 500) for fewer, and offset (0 or more) to read the next page of the same filter, until a page comes back short.",
       "args": [{"from": "query", "whole": true}],
       "returns": [{"body": true}]
     },
@@ -57,7 +57,7 @@
     "list_assets": {
       "method": "GET", "path": "/assets", "call": "ListAssets", "action": "assetmanager.asset.list",
       "title": "List assets",
-      "description": "List things, id order. Narrow by category, by tracking mode, or to those last seen at one place.",
+      "description": "List things, id order. Narrow by category, by tracking mode, or to those last seen at one place. A page holds at most 500 rows: pass limit (1 to 500) for fewer, and offset (0 or more) to read the next page of the same filter, until a page comes back short.",
       "args": [{"from": "query", "whole": true}],
       "returns": [{"body": true}]
     },
@@ -105,7 +105,7 @@
     "list_movements": {
       "method": "GET", "path": "/movements", "call": "ListMovements", "action": "assetmanager.movement.list",
       "title": "List movements",
-      "description": "List ledger entries. Narrow to one thing, or to one kind of entry.",
+      "description": "List ledger entries, id order. Narrow to one thing, or to one kind of entry. A page holds at most 500 rows: pass limit (1 to 500) for fewer, and offset (0 or more) to read the next page of the same filter, until a page comes back short.",
       "args": [{"from": "query", "whole": true}],
       "returns": [{"body": true}]
     },
@@ -139,7 +139,7 @@
     "list_holds": {
       "method": "GET", "path": "/holds", "call": "ListHolds", "action": "assetmanager.hold.list",
       "title": "List holds",
-      "description": "List reservations, id order. Narrow by thing, by place, or by where the reservation is in its life.",
+      "description": "List reservations, id order. Narrow by thing, by place, or by where the reservation is in its life. A page holds at most 500 rows: pass limit (1 to 500) for fewer, and offset (0 or more) to read the next page of the same filter, until a page comes back short.",
       "args": [{"from": "query", "whole": true}],
       "returns": [{"body": true}]
     },
@@ -195,6 +195,7 @@
     "ErrInvalidAsset": 400,
     "ErrAssetSerialTagExists": 400,
     "ErrInvalidMovement": 400,
-    "ErrInvalidHold": 400
+    "ErrInvalidHold": 400,
+    "ErrInvalidFilter": 400
   }
 }

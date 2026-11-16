@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/aosanya/mwanachama-backend-shared/gormutil"
 	"github.com/aosanya/mwanachama-backend-shared/specstore"
 
@@ -140,7 +142,7 @@ func (m *assetManager) ReverseMovement(ctx context.Context, movementID, performe
 	if original.Kind == models.MovementKindReversed {
 		return models.Movement{}, fmt.Errorf("%w: cannot reverse a reversal", ErrInvalidMovement)
 	}
-	existing, err := m.ListMovements(ctx, MovementFilter{AssetID: original.AssetID})
+	existing, err := m.everyMovement(ctx, MovementFilter{AssetID: original.AssetID})
 	if err != nil {
 		return models.Movement{}, fmt.Errorf("ReverseMovement: %w", err)
 	}
@@ -191,7 +193,7 @@ func (m *assetManager) GetMovement(ctx context.Context, movementID string) (mode
 	return out, nil
 }
 
-func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter) ([]models.Movement, error) {
+func (m *assetManager) movementQuery(ctx context.Context, filter MovementFilter) *gorm.DB {
 	q := m.store.Query(ctx, roleMovement)
 	if filter.AssetID != "" {
 		q = q.Where("asset_id = ?", filter.AssetID)
@@ -199,10 +201,25 @@ func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter)
 	if filter.Kind != "" {
 		q = q.Where("kind = ?", string(filter.Kind))
 	}
+	return q.Order("id")
+}
 
+func (m *assetManager) ListMovements(ctx context.Context, filter MovementFilter) ([]models.Movement, error) {
+	q, err := page(m.movementQuery(ctx, filter), filter.Limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("ListMovements: %w", err)
+	}
 	out, err := specstore.List[models.Movement](m.store, q, roleMovement)
 	if err != nil {
 		return nil, fmt.Errorf("ListMovements: %w", err)
+	}
+	return out, nil
+}
+
+func (m *assetManager) everyMovement(ctx context.Context, filter MovementFilter) ([]models.Movement, error) {
+	out, err := specstore.List[models.Movement](m.store, m.movementQuery(ctx, filter), roleMovement)
+	if err != nil {
+		return nil, fmt.Errorf("everyMovement: %w", err)
 	}
 	return out, nil
 }
@@ -211,7 +228,7 @@ func (m *assetManager) GetAssetBalance(ctx context.Context, assetID, locationID 
 	if locationID == "" {
 		return 0, fmt.Errorf("%w: a balance is only meaningful at a named location", ErrInvalidAsset)
 	}
-	movements, err := m.ListMovements(ctx, MovementFilter{AssetID: assetID})
+	movements, err := m.everyMovement(ctx, MovementFilter{AssetID: assetID})
 	if err != nil {
 		return 0, fmt.Errorf("GetAssetBalance: %w", err)
 	}

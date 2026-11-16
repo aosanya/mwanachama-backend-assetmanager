@@ -26,7 +26,7 @@ func (m *assetManager) ListHoldsExpiredAsOf(ctx context.Context, cutoffRFC3339 s
 	if err != nil {
 		return nil, fmt.Errorf("%w: cutoff must be RFC 3339: %v", ErrInvalidHold, err)
 	}
-	open, err := m.ListHolds(ctx, HoldFilter{Status: models.HoldStatusReserved})
+	open, err := m.everyHold(ctx, HoldFilter{Status: models.HoldStatusReserved})
 	if err != nil {
 		return nil, fmt.Errorf("ListHoldsExpiredAsOf: %w", err)
 	}

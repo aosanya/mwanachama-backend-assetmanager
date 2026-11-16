@@ -39,7 +39,7 @@ func holdSlotOf(h models.Hold) (*holdSlot, error) {
 }
 
 func (m *assetManager) refuseOverlappingSlot(ctx context.Context, assetID string, slot holdSlot) error {
-	live, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, Status: models.HoldStatusReserved})
+	live, err := m.everyHold(ctx, HoldFilter{AssetID: assetID, Status: models.HoldStatusReserved})
 	if err != nil {
 		return fmt.Errorf("CreateHold: %w", err)
 	}

@@ -71,34 +71,34 @@ const (
 	HoldStatusPartiallyCommitted = models.HoldStatusPartiallyCommitted
 )
 
-// LocationFilter scopes a [AssetManager.ListLocations] query. Zero-value
-// fields are ignored (no filtering applied for that field).
 type LocationFilter struct {
 	ParentLocationID string `query:"parent_location_id"`
 	RootOnly         bool   `query:"root_only"`
+	Limit            int    `query:"limit"`
+	Offset           int    `query:"offset"`
 }
 
-// AssetFilter scopes a [AssetManager.ListAssets] query. Zero-value fields
-// are ignored (no filtering applied for that field).
 type AssetFilter struct {
 	Category     string                   `query:"category"`
 	TrackingMode models.AssetTrackingMode `query:"tracking_mode"`
 	LocationID   string                   `query:"location_id"`
+	Limit        int                      `query:"limit"`
+	Offset       int                      `query:"offset"`
 }
 
-// MovementFilter scopes a [AssetManager.ListMovements] query. Zero-value
-// fields are ignored (no filtering applied for that field).
 type MovementFilter struct {
 	AssetID string              `query:"asset_id"`
 	Kind    models.MovementKind `query:"kind"`
+	Limit   int                 `query:"limit"`
+	Offset  int                 `query:"offset"`
 }
 
-// HoldFilter scopes a [AssetManager.ListHolds] query. Zero-value fields are
-// ignored (no filtering applied for that field).
 type HoldFilter struct {
 	AssetID    string            `query:"asset_id"`
 	LocationID string            `query:"location_id"`
 	Status     models.HoldStatus `query:"status"`
+	Limit      int               `query:"limit"`
+	Offset     int               `query:"offset"`
 }
 
 // AssetManager is the primary interface for asset/inventory lifecycle

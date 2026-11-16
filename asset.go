@@ -116,7 +116,7 @@ func (m *assetManager) DeleteAsset(ctx context.Context, assetID string) error {
 	if _, err := m.GetAsset(ctx, assetID); err != nil {
 		return err
 	}
-	openHolds, err := m.ListHolds(ctx, HoldFilter{AssetID: assetID, Status: models.HoldStatusReserved})
+	openHolds, err := m.everyHold(ctx, HoldFilter{AssetID: assetID, Status: models.HoldStatusReserved})
 	if err != nil {
 		return fmt.Errorf("DeleteAsset: %w", err)
 	}
@@ -136,7 +136,7 @@ func (m *assetManager) DeleteAsset(ctx context.Context, assetID string) error {
 	return nil
 }
 
-func (m *assetManager) ListAssets(ctx context.Context, filter AssetFilter) ([]models.Asset, error) {
+func (m *assetManager) assetQuery(ctx context.Context, filter AssetFilter) *gorm.DB {
 	q := m.store.Query(ctx, roleAsset).Where("deleted = ?", false)
 	if filter.Category != "" {
 		q = q.Where("category = ?", filter.Category)
@@ -147,10 +147,25 @@ func (m *assetManager) ListAssets(ctx context.Context, filter AssetFilter) ([]mo
 	if filter.LocationID != "" {
 		q = q.Where("location_id = ?", filter.LocationID)
 	}
+	return q.Order("id")
+}
 
-	out, err := specstore.List[models.Asset](m.store, q.Order("id"), roleAsset)
+func (m *assetManager) ListAssets(ctx context.Context, filter AssetFilter) ([]models.Asset, error) {
+	q, err := page(m.assetQuery(ctx, filter), filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("ListAssets: %w", err)
+	}
+	out, err := specstore.List[models.Asset](m.store, q, roleAsset)
+	if err != nil {
+		return nil, fmt.Errorf("ListAssets: %w", err)
+	}
+	return out, nil
+}
+
+func (m *assetManager) everyAsset(ctx context.Context, filter AssetFilter) ([]models.Asset, error) {
+	out, err := specstore.List[models.Asset](m.store, m.assetQuery(ctx, filter), roleAsset)
+	if err != nil {
+		return nil, fmt.Errorf("everyAsset: %w", err)
 	}
 	return out, nil
 }

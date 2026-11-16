@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/aosanya/mwanachama-backend-shared/gormutil"
 	"github.com/aosanya/mwanachama-backend-shared/specstore"
 
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
@@ -60,6 +61,9 @@ func (m *assetManager) CreateAsset(ctx context.Context, a models.Asset) (models.
 		return tx.WithContext(ctx).Table(m.store.Table(roleAsset)).Create(row).Error
 	})
 	if err != nil {
+		if gormutil.IsUniqueViolation(err) {
+			return models.Asset{}, ErrAssetSerialTagExists
+		}
 		return models.Asset{}, fmt.Errorf("CreateAsset: %w", classifyConflict(err))
 	}
 	return a, nil
@@ -99,6 +103,9 @@ func (m *assetManager) UpdateAsset(ctx context.Context, a models.Asset) (models.
 			columnName("UpdatedAt"):      now,
 		})
 	if written.Error != nil {
+		if gormutil.IsUniqueViolation(written.Error) {
+			return models.Asset{}, ErrAssetSerialTagExists
+		}
 		return models.Asset{}, fmt.Errorf("UpdateAsset: %w", classifyConflict(written.Error))
 	}
 	if written.RowsAffected == 0 {

@@ -4,7 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/aosanya/mwanachama-backend-shared/gormutil"
+	"github.com/aosanya/mwanachama-backend-shared/spec"
 )
+
+const serialTagIndex = "serial_tag"
 
 var busyMessages = []string{
 	"database table is locked",
@@ -36,4 +41,27 @@ func classifyConflict(err error) error {
 		return fmt.Errorf("%w: %v", ErrConflict, err)
 	}
 	return err
+}
+
+func (m *assetManager) violatesSerialTagIndex(err error) bool {
+	taken := false
+	gormutil.ClassifyError(err, func(string) error { return err }, func(violated string) error {
+		taken = m.namesSerialTagIndex(violated)
+		return err
+	})
+	return taken
+}
+
+func (m *assetManager) namesSerialTagIndex(violated string) bool {
+	if cut := strings.Index(violated, " ("); cut >= 0 {
+		violated = violated[:cut]
+	}
+	violated = strings.TrimSpace(violated)
+	if violated == "" {
+		return false
+	}
+	asset := m.store.Object(roleAsset)
+	postgresName := m.store.Spec().IndexFor(asset, spec.Index{Name: serialTagIndex})
+	sqliteName := m.store.Table(roleAsset) + "." + serialTagIndex
+	return violated == postgresName || violated == sqliteName
 }

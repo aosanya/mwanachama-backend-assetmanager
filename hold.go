@@ -36,19 +36,6 @@ func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Ho
 	if _, err := m.GetLocation(ctx, h.LocationID); err != nil {
 		return models.Hold{}, err
 	}
-	if slot != nil {
-		if err := m.refuseOverlappingSlot(ctx, h.AssetID, *slot); err != nil {
-			return models.Hold{}, err
-		}
-	}
-
-	available, err := m.availableQuantity(ctx, h.AssetID, h.LocationID)
-	if err != nil {
-		return models.Hold{}, fmt.Errorf("CreateHold: %w", err)
-	}
-	if h.Quantity > available {
-		return models.Hold{}, fmt.Errorf("%w: requested %d, available %d", ErrInsufficientAvailable, h.Quantity, available)
-	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	h.Status = models.HoldStatusReserved
@@ -56,10 +43,36 @@ func (m *assetManager) CreateHold(ctx context.Context, h models.Hold) (models.Ho
 	h.CreatedAt = now
 	h.UpdatedAt = now
 
-	if err := m.store.Insert(ctx, roleHold, h); err != nil {
-		return models.Hold{}, fmt.Errorf("CreateHold: %w", err)
+	err = m.store.InTransaction(ctx, func(tx *store) error {
+		if err := lockAssetForHold(ctx, tx, h.AssetID); err != nil {
+			return err
+		}
+		inTx := &assetManager{db: m.db, store: tx}
+		return inTx.placeHold(ctx, h, slot)
+	})
+	if err != nil {
+		if errors.Is(err, ErrInsufficientAvailable) || errors.Is(err, ErrHoldSlotOverlaps) {
+			return models.Hold{}, err
+		}
+		return models.Hold{}, fmt.Errorf("CreateHold: %w", classifyConflict(err))
 	}
 	return h, nil
+}
+
+func (m *assetManager) placeHold(ctx context.Context, h models.Hold, slot *holdSlot) error {
+	if slot != nil {
+		if err := m.refuseOverlappingSlot(ctx, h.AssetID, *slot); err != nil {
+			return err
+		}
+	}
+	available, err := m.availableQuantity(ctx, h.AssetID, h.LocationID)
+	if err != nil {
+		return err
+	}
+	if h.Quantity > available {
+		return fmt.Errorf("%w: requested %d, available %d", ErrInsufficientAvailable, h.Quantity, available)
+	}
+	return m.store.Insert(ctx, roleHold, h)
 }
 
 func (m *assetManager) availableQuantity(ctx context.Context, assetID, locationID string) (int64, error) {

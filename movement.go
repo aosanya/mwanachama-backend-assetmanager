@@ -41,7 +41,7 @@ func (m *assetManager) PostMovement(ctx context.Context, mv models.Movement) (mo
 		mv.OccurredAt = now
 	}
 
-	if err := m.store.Insert(ctx, roleMovement, mv); err != nil {
+	if err := m.appendMovement(ctx, mv); err != nil {
 		return models.Movement{}, fmt.Errorf("PostMovement: %w", err)
 	}
 	out := mv

@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/aosanya/mwanachama-backend-shared/dispatch"
 	"github.com/aosanya/mwanachama-backend-shared/httpwire"
+	"github.com/aosanya/mwanachama-backend-shared/versioncheck"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
 )
@@ -30,6 +31,7 @@ var sentinels = map[string]error{
 	"ErrHoldSlotOverlaps":            mwanachamaassetmanager.ErrHoldSlotOverlaps,
 	"ErrConflict":                    mwanachamaassetmanager.ErrConflict,
 	"ErrInvalidFilter":               mwanachamaassetmanager.ErrInvalidFilter,
+	"ErrStale":                       dispatch.ByType(&versioncheck.StaleError{}, nil),
 }
 
 var AnonymousActions = []string{}

@@ -77,7 +77,7 @@ func TestA14_UpdateAssetLosesToADeleteThatLandsBetweenItsReadAndItsWrite(t *test
 	deleteRowBeforeTheNextUpdate(db, tableFor(t, s, "asset"), asset.ID)
 
 	asset.Name = "raced-update"
-	if _, err := am.UpdateAsset(ctx, asset); !errors.Is(err, mwanachamaassetmanager.ErrAssetNotFound) {
+	if _, err := am.UpdateAsset(ctx, models.AssetUpdate{ID: asset.ID, Name: asset.Name}); !errors.Is(err, mwanachamaassetmanager.ErrAssetNotFound) {
 		t.Fatalf("UpdateAsset after a delete landed in its gap: %v, want ErrAssetNotFound", err)
 	}
 	var name string

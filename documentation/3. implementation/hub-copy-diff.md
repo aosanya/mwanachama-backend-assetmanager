@@ -17,6 +17,10 @@ The default path is `../projects/hub-steward/code/wakala-api/modules/assetmanage
 3. Runs every Go file on both sides through `scripts/hubdiff`, which parses it, drops all comments and prints it with `gofmt`, so comments and layout do not show as differences.
 4. Runs `diff -r backend hub`, prints the report, and sets the exit code by the rule above. A changed `.go` or `.json` file, a file only the hub has, and a binary difference exit 1; files only this repository has (its tests and `spec/`) do not.
 
+## Result of 2026-11-19
+
+The hub copy gained one change since the run below, the stale-version asset update (hub commit 3a6759b3). It is merged here, and [hub-import-drift.md](hub-import-drift.md) holds the full list of differences, their dispositions and the hub wiring outside the module. The script still exits 1, on `asset.go` and `conflict.go` only, for the serial tag handling the hub copy lacks.
+
 ## Result of 2026-11-16
 
 Run at d0ef4d9 against the working tree of the hub's `dev` branch, where the module folder has no uncommitted change and its last commit is 6863707a. The exit code is 1. Every file the hub has exists here. Two of them differ, and nothing in the output is `Only in hub`. The rest is `Only in backend` lines.

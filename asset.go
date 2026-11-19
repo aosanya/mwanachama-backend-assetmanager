@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/aosanya/mwanachama-backend-shared/specstore"
+	"github.com/aosanya/mwanachama-backend-shared/versioncheck"
 
 	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
@@ -80,9 +81,12 @@ func (m *assetManager) GetAsset(ctx context.Context, assetID string) (models.Ass
 	return out, nil
 }
 
-func (m *assetManager) UpdateAsset(ctx context.Context, a models.Asset) (models.Asset, error) {
+func (m *assetManager) UpdateAsset(ctx context.Context, a models.AssetUpdate) (models.Asset, error) {
 	current, err := m.GetAsset(ctx, a.ID)
 	if err != nil {
+		return models.Asset{}, err
+	}
+	if err := staleAssetUpdate(a, current); err != nil {
 		return models.Asset{}, err
 	}
 	if a.Name == "" {
@@ -174,4 +178,17 @@ func (m *assetManager) everyAsset(ctx context.Context, filter AssetFilter) ([]mo
 		return nil, fmt.Errorf("everyAsset: %w", err)
 	}
 	return out, nil
+}
+
+func staleAssetUpdate(sent models.AssetUpdate, stored models.Asset) error {
+	updatedAt, err := time.Parse(time.RFC3339, stored.UpdatedAt)
+	if err != nil {
+		return nil
+	}
+	return versioncheck.Stale(sent.Version, updatedAt, []versioncheck.Field{
+		{Name: "name", Sent: sent.Name, Stored: stored.Name},
+		{Name: "category", Sent: sent.Category, Stored: stored.Category},
+		{Name: "serial_tag", Sent: sent.SerialTag, Stored: stored.SerialTag},
+		{Name: "attributes_json", Sent: sent.AttributesJSON, Stored: stored.AttributesJSON},
+	})
 }

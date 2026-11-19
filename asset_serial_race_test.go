@@ -111,7 +111,7 @@ func TestAnAssetRenamedToAnotherAssetsSerialTagIsRefusedAsInUse(t *testing.T) {
 				t.Fatal(err)
 			}
 			second.SerialTag = first.SerialTag
-			if _, err := m.UpdateAsset(ctx, second); !errors.Is(err, ErrAssetSerialTagExists) {
+			if _, err := m.UpdateAsset(ctx, renamed(second, second.Name, "")); !errors.Is(err, ErrAssetSerialTagExists) {
 				t.Fatalf("updating onto a tag in use answered %v, want ErrAssetSerialTagExists", err)
 			}
 		})

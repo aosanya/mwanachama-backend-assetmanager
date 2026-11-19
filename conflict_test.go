@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
+	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 type interferingManager struct {
@@ -318,7 +319,7 @@ func TestUpdateAsset_RefusesARowDeletedAfterItReadItAndLeavesTheNameAlone(t *tes
 	im.afterTheNextReadOf(t, "asset", fmt.Sprintf("UPDATE %s SET deleted = ? WHERE id = ?", im.tables["asset"]), true, a.ID)
 
 	a.Name = "raced-update"
-	_, err = im.UpdateAsset(ctx, a)
+	_, err = im.UpdateAsset(ctx, models.AssetUpdate{ID: a.ID, Name: a.Name})
 	if !errors.Is(err, mwanachamaassetmanager.ErrAssetNotFound) {
 		t.Fatalf("err = %v, want ErrAssetNotFound", err)
 	}

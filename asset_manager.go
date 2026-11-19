@@ -121,7 +121,7 @@ type AssetManager interface {
 
 	CreateAsset(ctx context.Context, a models.Asset) (models.Asset, error)
 	GetAsset(ctx context.Context, assetID string) (models.Asset, error)
-	UpdateAsset(ctx context.Context, a models.Asset) (models.Asset, error)
+	UpdateAsset(ctx context.Context, a models.AssetUpdate) (models.Asset, error)
 	DeleteAsset(ctx context.Context, assetID string) error
 	ListAssets(ctx context.Context, filter AssetFilter) ([]models.Asset, error)
 

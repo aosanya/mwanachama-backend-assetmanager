@@ -7,6 +7,7 @@ import (
 	"time"
 
 	mwanachamaassetmanager "github.com/aosanya/mwanachama-backend-assetmanager"
+	"github.com/aosanya/mwanachama-backend-assetmanager/models"
 )
 
 func TestCreateAsset_Fungible(t *testing.T) {
@@ -118,7 +119,7 @@ func TestUpdateAsset_TrackingModeImmutable(t *testing.T) {
 
 	a, _ := m.CreateAsset(ctx, mwanachamaassetmanager.Asset{Name: "Rice", TrackingMode: mwanachamaassetmanager.AssetTrackingModeFungible})
 	a.TrackingMode = mwanachamaassetmanager.AssetTrackingModeSerialized
-	_, err := m.UpdateAsset(ctx, a)
+	_, err := m.UpdateAsset(ctx, models.AssetUpdate{ID: a.ID, Name: a.Name, TrackingMode: a.TrackingMode})
 	if !errors.Is(err, mwanachamaassetmanager.ErrAssetTrackingModeImmutable) {
 		t.Fatalf("expected ErrAssetTrackingModeImmutable, got %v", err)
 	}

@@ -3,9 +3,10 @@ module github.com/aosanya/mwanachama-backend-assetmanager
 go 1.25.0
 
 require (
-	github.com/aosanya/mwanachama-backend-shared v0.0.0
+	github.com/aosanya/mwanachama-backend-shared v0.3.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2
 )
 
@@ -30,11 +31,8 @@ require (
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	gorm.io/driver/postgres v1.6.2 // indirect
 	modernc.org/libc v1.22.5 // indirect
 	modernc.org/mathutil v1.5.0 // indirect
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
 )
-
-replace github.com/aosanya/mwanachama-backend-shared => ../mwanachama-backend-shared
